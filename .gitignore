@@ -1,7 +1,6 @@
 .DS_Store
 __pycache__
 /TEMP
-*.pyd
 .venv
 /opt
 tools/aria2c/
@@ -26,3 +25,29 @@ rmvpe.pt
 /assets/weights/*
 ffmpeg.*
 ffprobe.*
+
+
+### IDE FILES
+
+# Ignore PyCharm files
+.idea/
+
+# Ignore Visual Studio Code files
+.vscode/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Ignore output folder
+output/
+
+# Ignore virtual environment folder
+venv/
+
+# Ignore distribution folders
+dist/
+build/
+*.egg-info/

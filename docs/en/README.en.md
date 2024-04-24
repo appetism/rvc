@@ -210,6 +210,16 @@ Download and unzip `RVC-beta.7z`. After unzipping, double-click `go-web.bat` to 
 rvcmd packs/general/latest # RVC-Models-Downloader command
 ```
 
+## Infer web REST API
+
+You can use the following command to start the REST API server:
+```bash
+python rvc_fastapi.py
+```
+The rest API was built using fastAPI. It supports inference on pre trained models with the web-UI.
+You can find the documentation at http://localhost:8000/docs
+
+
 ## Credits
 + [ContentVec](https://github.com/auspicious3000/contentvec/)
 + [VITS](https://github.com/jaywalnut310/vits)
