@@ -2,7 +2,7 @@
 
 FROM nvidia/cuda:11.6.2-cudnn8-runtime-ubuntu20.04
 
-EXPOSE 7865
+EXPOSE 7866
 
 WORKDIR /app
 
@@ -44,4 +44,4 @@ RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co
 
 VOLUME [ "/app/weights", "/app/opt" ]
 
-CMD ["python3", "infer-web.py", "--nocheck"]
+CMD ["python3", "rvc_fastapi.py", "--nocheck"]
