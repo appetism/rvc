@@ -1,0 +1,35 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rvc-ingress
+  namespace: rvc-namespace
+  annotations:
+    cert-manager.io/cluster-issuer: 'letsencrypt-prod'
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - "voice.binant.io"
+      secretName: rvc-cert-secret
+  rules:
+    - host: voice-console.binant.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rvc-cluster-ip-service
+                port:
+                  number: 7865
+    - host: voice-api.binant.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rvc-cluster-ip-service
+                port:
+                  number: 7866
