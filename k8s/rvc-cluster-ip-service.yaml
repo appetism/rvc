@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rvc-cluster-ip-service
+  namespace: rvc-namespace
+  labels:
+    app: rvc
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7865
+      targetPort: 7865
+      name: rvc-console
+    - port: 7866
+      targetPort: 7866
+      name: rvc-api
+  selector:
+    app: rvc
+    tier: rvc_api

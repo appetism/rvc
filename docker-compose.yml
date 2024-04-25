@@ -1,20 +1,16 @@
 version: "3.8"
 services:
-  rvc:
+  web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rvc
+    container_name: rvc-container
     volumes:
       - ./weights:/app/assets/weights
       - ./opt:/app/opt
+      - ./logs:/app/logs
+      - ./infer/lib:/app/infer/lib
       # - ./dataset:/app/dataset # you can use this folder in order to provide your dataset for model training
     ports:
       - 7865:7865
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - 7866:7866
