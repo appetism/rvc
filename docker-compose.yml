@@ -4,7 +4,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rvc_web
+    container_name: rvc-container
     volumes:
       - ./weights:/app/assets/weights
       - ./opt:/app/opt
@@ -13,16 +13,4 @@ services:
       # - ./dataset:/app/dataset # you can use this folder in order to provide your dataset for model training
     ports:
       - 7865:7865
-
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile.api
-    container_name: rvc_api
-    volumes:
-      - ./weights:/app/assets/weights
-      - ./opt:/app/opt
-      - ./infer/lib:/app/infer/lib
-    ports:
       - 7866:7866
