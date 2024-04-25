@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rvc-deployment
+  namespace: rvc-namespace
+  labels:
+    app: rvc
+spec:
+  selector:
+    matchLabels:
+      app: rvc
+      tier: rvc_api
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: rvc
+        tier: rvc_api
+    spec:
+      containers:
+        - image: tahaouarrak/rvc:latest
+          name: rvc-container
+          ports:
+            - containerPort: 7865
+            - containerPort: 7866
+          volumeMounts:
+            - name: rvc-logs-persistent-storage
+              mountPath: /app/logs
+            - name: rvc-weights-persistent-storage
+              mountPath: /app/weights
+          resources:
+            requests:
+              memory: "500Mi"
+            limits:
+              memory: "6Gi"
+      volumes:
+        - name: rvc-logs-persistent-storage
+          persistentVolumeClaim:
+            claimName: rvc-logs-pvc
+        - name: rvc-weights-persistent-storage
+          persistentVolumeClaim:
+            claimName: rvc-weights-pvc
