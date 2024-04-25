@@ -59,6 +59,6 @@ jobs:
       - name: Deploy
         run: |-
           kubectl apply -f k8s
-          kubectl set image deployments/rvc-deployment rvc-container=tahaouarrak/rvc:$GITHUB_SHA
+          kubectl set image deployments/rvc-deployment rvc-container=tahaouarrak/rvc:$GITHUB_SHA --namespace rvc-namespace
 
 
