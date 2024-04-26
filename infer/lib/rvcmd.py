@@ -16,9 +16,11 @@ def sha256(f) -> str:
     return sha256_hash.hexdigest()
 
 
-def check_model(dir_name: Path, model_name: str, hash: str) -> bool:
+def check_model(
+    dir_name: Path, model_name: str, hash: str, remove_incorrect=False
+) -> bool:
     target = dir_name / model_name
-    relname = str(target)
+    relname = target.as_posix()
     relname = relname[relname.rindex("assets/") :]
     logger.debug(f"checking {relname}...")
     if not os.path.exists(target):
@@ -26,36 +28,51 @@ def check_model(dir_name: Path, model_name: str, hash: str) -> bool:
         return False
     with open(target, "rb") as f:
         digest = sha256(f)
+        bakfile = f"{target}.bak"
         if digest != hash:
-            logger.info(f"{target} sha256 hash mismatch.")
+            logger.warn(f"{target} sha256 hash mismatch.")
             logger.info(f"expected: {hash}")
             logger.info(f"real val: {digest}")
-            os.remove(str(target))
+            logger.warn("please add parameter --update to download the latest assets.")
+            if remove_incorrect:
+                if not os.path.exists(bakfile):
+                    os.rename(str(target), bakfile)
+                else:
+                    os.remove(str(target))
             return False
+        if remove_incorrect and os.path.exists(bakfile):
+            os.remove(bakfile)
     return True
 
 
-def check_all_assets() -> bool:
+def check_all_assets(update=False) -> bool:
     BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
     logger.info("checking hubret & rmvpe...")
 
     if not check_model(
-        BASE_DIR / "assets/hubert",
+        BASE_DIR / "assets" / "hubert",
         "hubert_base.pt",
         os.environ["sha256_hubert_base_pt"],
+        update,
     ):
         return False
     if not check_model(
-        BASE_DIR / "assets/rmvpe", "rmvpe.pt", os.environ["sha256_rmvpe_pt"]
+        BASE_DIR / "assets" / "rmvpe",
+        "rmvpe.pt",
+        os.environ["sha256_rmvpe_pt"],
+        update,
     ):
         return False
     if not check_model(
-        BASE_DIR / "assets/rmvpe", "rmvpe.onnx", os.environ["sha256_rmvpe_onnx"]
+        BASE_DIR / "assets" / "rmvpe",
+        "rmvpe.onnx",
+        os.environ["sha256_rmvpe_onnx"],
+        update,
     ):
         return False
 
-    rvc_models_dir = BASE_DIR / "assets/pretrained"
+    rvc_models_dir = BASE_DIR / "assets" / "pretrained"
     logger.info("checking pretrained models...")
     model_names = [
         "D32k.pth",
@@ -73,18 +90,22 @@ def check_all_assets() -> bool:
     ]
     for model in model_names:
         menv = model.replace(".", "_")
-        if not check_model(rvc_models_dir, model, os.environ[f"sha256_v1_{menv}"]):
+        if not check_model(
+            rvc_models_dir, model, os.environ[f"sha256_v1_{menv}"], update
+        ):
             return False
 
-    rvc_models_dir = BASE_DIR / "assets/pretrained_v2"
+    rvc_models_dir = BASE_DIR / "assets" / "pretrained_v2"
     logger.info("checking pretrained models v2...")
     for model in model_names:
         menv = model.replace(".", "_")
-        if not check_model(rvc_models_dir, model, os.environ[f"sha256_v2_{menv}"]):
+        if not check_model(
+            rvc_models_dir, model, os.environ[f"sha256_v2_{menv}"], update
+        ):
             return False
 
     logger.info("checking uvr5_weights...")
-    rvc_models_dir = BASE_DIR / "assets/uvr5_weights"
+    rvc_models_dir = BASE_DIR / "assets" / "uvr5_weights"
     model_names = [
         "HP2-人声vocals+非人声instrumentals.pth",
         "HP2_all_vocals.pth",
@@ -97,12 +118,15 @@ def check_all_assets() -> bool:
     ]
     for model in model_names:
         menv = model.replace(".", "_")
-        if not check_model(rvc_models_dir, model, os.environ[f"sha256_uvr5_{menv}"]):
+        if not check_model(
+            rvc_models_dir, model, os.environ[f"sha256_uvr5_{menv}"], update
+        ):
             return False
     if not check_model(
-        BASE_DIR / "assets/uvr5_weights/onnx_dereverb_By_FoxJoy",
+        BASE_DIR / "assets" / "uvr5_weights" / "onnx_dereverb_By_FoxJoy",
         "vocals.onnx",
         os.environ[f"sha256_uvr5_vocals_onnx"],
+        update,
     ):
         return False
 
@@ -141,7 +165,7 @@ def download_and_extract_zip(url: str, folder: str):
 def download_dns_yaml(url: str, folder: str):
     logger.info(f"downloading {url}")
     response = requests.get(url, stream=True, timeout=(5, 10))
-    with open(f"{folder}/dns.yaml", "wb") as out_file:
+    with open(os.path.join(folder, "dns.yaml"), "wb") as out_file:
         out_file.write(response.content)
         logger.info(f"downloaded into {folder}")
 
@@ -164,7 +188,7 @@ def download_all_assets(tmpdir: str, version="0.2.2"):
     }
     system_type = platform.system().lower()
     architecture = platform.machine().lower()
-    is_win = architecture == "windows"
+    is_win = system_type == "windows"
 
     architecture = archs.get(architecture, None)
     if not architecture:
@@ -176,7 +200,7 @@ def download_all_assets(tmpdir: str, version="0.2.2"):
         )
         suffix = "zip" if is_win else "tar.gz"
         RVCMD_URL = BASE_URL + f"v{version}/rvcmd_{system_type}_{architecture}.{suffix}"
-        cmdfile = tmpdir + "/rvcmd"
+        cmdfile = os.path.join(tmpdir, "rvcmd")
         if is_win:
             download_and_extract_zip(RVCMD_URL, tmpdir)
             cmdfile += ".exe"
@@ -207,5 +231,13 @@ def download_all_assets(tmpdir: str, version="0.2.2"):
             download_and_extract_tar_gz(RVCMD_URL, tmpdir)
             os.chmod(cmdfile, 0o755)
         subprocess.run(
-            [cmdfile, "-notui", "-w", "0", "-dns", f"{tmpdir}/dns.yaml", "assets/all"]
+            [
+                cmdfile,
+                "-notui",
+                "-w",
+                "0",
+                "-dns",
+                os.path.join(tmpdir, "dns.yaml"),
+                "assets/all",
+            ]
         )
