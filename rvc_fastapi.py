@@ -105,7 +105,7 @@ def infer(
 
 @app.post("/voice2voice", tags=["voice2voice"])
 async def voice2voice(
-    input_file: fastapi.UploadFile,
+    input_file: UploadFile,
     model_name: str,
     index_path: str = None,
     f0up_key: int = 0,
@@ -119,32 +119,44 @@ async def voice2voice(
     protect: float = 0.33
 ):
     """
-    :param input_file: the .wav file to be converted
-    :param model_name: the name of the model which was previously trained in the gui like the name in logs folder
-    :param index_path: the index file of the previously trained model if none then use default dir logs by rvc.
-    :param f0up_key: 0 or 1
-    :param f0method: harvest, pm, crepe or rmvpe
-    :param index_rate: 0.66
-    :param device: if none then use default by rvc. cuda or cpu or specific cuda device "cuda:0", "cuda:1"
-    :param is_half: False or True
-    :param filter_radius: 3
-    :param resample_sr: 0
-    :param rms_mix_rate: 1
-    :param protect: 0.33
+    Endpoint to convert voices from one type to another using a specified model.
+
+    Parameters:
+    - input_file: the .wav file to be converted
+    - model_name: the name of the model as found in the logs directory
+    - index_path: optional path to an index file of the trained model
+    - f0up_key: frequency key shifting, 0 (no shift) or 1
+    - f0method: method for fundamental frequency extraction (harvest, pm, crepe, rmvpe)
+    - index_rate: the rate at which to use the indexing file
+    - device: computation device (cuda, cpu, cuda:0, cuda:1, etc.)
+    - is_half: whether to use half precision for the model
+    - filter_radius: radius of the filter used in processing
+    - resample_sr: resample rate, if needed (0 for no resampling)
+    - rms_mix_rate: rate to mix in RMS normalization
+    - protect: protection factor to prevent clipping
     """
     audio_bytes = await input_file.read()
 
+    # Ensure input file is closed after reading
+    await input_file.close()
+
+    # Prepare kwargs for the infer function
     kwargs = locals()
     kwargs["input"] = audio_bytes
     del kwargs["input_file"]
 
-    # call the infer function
+    # Call the infer function
     try:
+        # Create a new BytesIO object for each request
         wf = infer(**kwargs)
+        wf.seek(0)  # Ensure the buffer is rewound to the beginning
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": f"attachment; filename=rvc.wav"})
+    # Return the response and ensure wf is closed after use
+    response = StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
+    response.background = BackgroundTask(wf.close)
+    return response
 
 
 @app.post("/voice2voice_local", tags=["voice2voice"])

@@ -6,11 +6,13 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: 'letsencrypt-prod'
     nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/proxy-body-size: 64m
 spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - "voice.binant.io"
+        - "voice-console.binant.io"
+        - "voice-api.binant.io"
       secretName: rvc-cert-secret
   rules:
     - host: voice-console.binant.io

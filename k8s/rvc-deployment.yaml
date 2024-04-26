@@ -28,12 +28,14 @@ spec:
             - name: rvc-logs-persistent-storage
               mountPath: /app/logs
             - name: rvc-weights-persistent-storage
-              mountPath: /app/weights
+              mountPath: /app/assets/weights
           resources:
             requests:
-              memory: "500Mi"
-            limits:
               memory: "6Gi"
+              cpu: "10"
+            limits:
+              memory: "7Gi"
+              cpu: "12"
       volumes:
         - name: rvc-logs-persistent-storage
           persistentVolumeClaim:

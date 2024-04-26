@@ -8,6 +8,6 @@ spec:
   issuerRef:
     name: letsencrypt-prod
     kind: ClusterIssuer
-  commonName: "voice.binant.io"
+  commonName: "*.binant.io"
   dnsNames:
-    - "voice.binant.io"
+    - "*.binant.io"

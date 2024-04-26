@@ -14,3 +14,11 @@ services:
     ports:
       - 7865:7865
       - 7866:7866
+    deploy:
+      resources:
+        limits:
+          cpus: '4'    # Limit to 8 CPUs
+          memory: 12G     # Limit to 12 GB of memory
+        reservations:
+          cpus: '4'    # Reserve 4 CPUs
+          memory: 8G     # Reserve 8 GB of memory
