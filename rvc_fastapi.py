@@ -1,37 +1,26 @@
-
 from typing import Union
 import os
 import sys
-from io import BytesIO
+import fastapi
+import uvicorn
 
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
+from io import BytesIO
+from dotenv import load_dotenv
+from scipy.io import wavfile
+from configs.config import Config
+from infer.modules.vc.modules import VC
 
 # don't like settings paths like this at all but due bad code its necessary
 now_dir = os.getcwd()
 sys.path.append(now_dir)
 print(now_dir)
 
-from dotenv import load_dotenv
-from scipy.io import wavfile
-
-from configs.config import Config
-from infer.modules.vc.modules import VC
-import fastapi
-import uvicorn
-
 # load_dotenv is also very bad practice but necessary due bad code
 load_dotenv()
 
-app = fastapi.FastAPI(
-    title="Retrieval-based Voice Conversion FastAPI",
-    summary="Infer previously cloned voices",
-    version="0.0.2",
-    contact={
-        "name": "w4hns1nn",
-        "url": "https://github.com/w4hns1nn",
-    }
-)
+app = FastAPI()
 
 tags = [
     {
