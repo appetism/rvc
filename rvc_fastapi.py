@@ -4,7 +4,7 @@ import sys
 import fastapi
 import uvicorn
 
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTask
 from fastapi.responses import StreamingResponse
 from io import BytesIO
 from dotenv import load_dotenv
