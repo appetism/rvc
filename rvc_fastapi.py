@@ -4,7 +4,7 @@ import sys
 import fastapi
 import uvicorn
 
-from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTask
+from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from io import BytesIO
 from dotenv import load_dotenv
@@ -105,7 +105,8 @@ async def voice2voice(
     filter_radius: int = 3,
     resample_sr: int = 0,
     rms_mix_rate: float = 1,
-    protect: float = 0.33
+    protect: float = 0.33,
+    background_tasks: BackgroundTasks
 ):
     """
     Endpoint to convert voices from one type to another using a specified model.
@@ -142,11 +143,11 @@ async def voice2voice(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-    # Return the response and ensure wf is closed after use
-    response = StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
-    response.background = BackgroundTask(wf.close)
-    return response
+    # Schedule the close operation for after the response is sent
+    background_tasks.add_task(wf.close)
 
+    # Return the response
+    return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
 
 @app.post("/voice2voice_local", tags=["voice2voice"])
 async def voice2voice_local(
