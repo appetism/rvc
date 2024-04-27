@@ -95,6 +95,7 @@ def infer(
 @app.post("/voice2voice", tags=["voice2voice"])
 async def voice2voice(
     input_file: UploadFile,
+    background_tasks: BackgroundTasks,
     model_name: str,
     index_path: str = None,
     f0up_key: int = 0,
@@ -105,8 +106,7 @@ async def voice2voice(
     filter_radius: int = 3,
     resample_sr: int = 0,
     rms_mix_rate: float = 1,
-    protect: float = 0.33,
-    background_tasks: BackgroundTasks
+    protect: float = 0.33
 ):
     """
     Endpoint to convert voices from one type to another using a specified model.
