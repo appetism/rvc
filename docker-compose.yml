@@ -10,6 +10,7 @@ services:
       - ./opt:/app/opt
       - ./logs:/app/logs
       - ./infer/lib:/app/infer/lib
+      - ./rvc_fastapi.py:/app/rvc_fastapi.py
       # - ./dataset:/app/dataset # you can use this folder in order to provide your dataset for model training
     ports:
       - 7865:7865
