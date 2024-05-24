@@ -3,6 +3,7 @@ import os
 import sys
 import fastapi
 import uvicorn
+import asyncio
 
 from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTasks
 from fastapi.responses import StreamingResponse
@@ -11,6 +12,7 @@ from dotenv import load_dotenv
 from scipy.io import wavfile
 from configs.config import Config
 from infer.modules.vc.modules import VC
+from concurrent.futures import ThreadPoolExecutor
 
 # don't like settings paths like this at all but due bad code its necessary
 now_dir = os.getcwd()
@@ -45,6 +47,8 @@ class ModelCache:
             vc.get_vc(f"{model_name}.pth")
             self.models[model_name] = vc
         return self.models[model_name]
+
+executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4))  # Adjust based on your server's capability
 
 
 def infer(
@@ -89,6 +93,7 @@ def infer(
     # using virtual file to be able to return it as response
     wf = BytesIO()
     wavfile.write(wf, wav_opt[0], wav_opt[1])
+    wf.seek(0)
     return wf
 
 
@@ -138,8 +143,10 @@ async def voice2voice(
     # Call the infer function
     try:
         # Create a new BytesIO object for each request
-        wf = infer(**kwargs)
-        wf.seek(0)  # Ensure the buffer is rewound to the beginning
+#         wf = infer(**kwargs)
+         wf = await asyncio.get_event_loop().run_in_executor(
+                     executor, infer, audio_bytes, model_name, index_path, f0up_key, f0method, index_rate, device, is_half, filter_radius, resample_sr, rms_mix_rate, protect
+                 )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
