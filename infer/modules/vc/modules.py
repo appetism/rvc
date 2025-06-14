@@ -171,6 +171,10 @@ class VC:
             if self.hubert_model is None:
                 self.hubert_model = load_hubert(self.config)
 
+            # Initialize pipeline if not already done
+            if self.pipeline is None:
+                self.pipeline = Pipeline(self.tgt_sr, self.config)
+
             if file_index:
                 file_index = (
                     file_index.strip(" ")

@@ -86,6 +86,8 @@ if os.access(model_path, os.F_OK) == False:
         % model_path
     )
     exit(0)
+
+torch.serialization.add_safe_globals([fairseq.data.dictionary.Dictionary])
 models, saved_cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
     [model_path],
     suffix="",
