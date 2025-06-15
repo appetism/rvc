@@ -314,7 +314,11 @@ async def voice2voice_url_s3(
             # This is the model name RVC expects (filename without .pth extension)
             derived_rvc_model_name = os.path.splitext(pth_basename)[0]
 
-            weights_dir = os.path.join(now_dir, "weights")
+            # Ensure the target directory structure matches what RVC expects for loading
+            # The error log indicates it's looking in "assets/weights/"
+            weights_dir = os.path.join(now_dir, "assets", "weights") # Changed to use 'assets/weights'
+            os.makedirs(weights_dir, exist_ok=True) # Ensure the target weights directory exists
+
             logs_dir = os.path.join(now_dir, "logs")
 
             # Target paths in RVC structure
@@ -602,77 +606,6 @@ class HuggingFaceModelManager:
 
 # Initialize HF Model Manager
 hf_model_manager = HuggingFaceModelManager()
-
-@app.post("/download_model", tags=["models"])
-async def download_model(model_repo_id: str = Form(...)):
-    """
-    Download a model from Hugging Face Hub.
-
-    Parameters:
-    - model_repo_id: The Hugging Face repository ID (e.g., username/model-name)
-
-    Returns:
-    - JSON with model information or error details
-    """
-    try:
-        result = await asyncio.get_event_loop().run_in_executor(
-            executor, hf_model_manager.get_model, model_repo_id
-        )
-
-        if result["statusCode"] == 200:
-            model_info = result["body"]
-
-            # Get model name from pth file (without .pth extension)
-            pth_filename = os.path.basename(model_info["pth_path"])
-            model_name = os.path.splitext(pth_filename)[0]
-
-            # Copy model files to expected locations
-            weights_dir = os.path.join(now_dir, "weights")
-            logs_dir = os.path.join(now_dir, "logs")
-
-            # Create directories if they don't exist
-            os.makedirs(weights_dir, exist_ok=True)
-            os.makedirs(os.path.join(logs_dir, model_name), exist_ok=True)
-
-            # Copy or symlink files to the right locations
-            target_pth_path = os.path.join(weights_dir, pth_filename)
-            target_index_path = os.path.join(logs_dir, model_name, os.path.basename(model_info["index_path"]))
-
-            # Only copy if not already in the correct location
-            if model_info["pth_path"] != target_pth_path:
-                shutil.copy2(model_info["pth_path"], target_pth_path)
-
-            if model_info["index_path"] != target_index_path:
-                shutil.copy2(model_info["index_path"], target_index_path)
-
-            return JSONResponse(
-                content={
-                    "status": "success",
-                    "message": f"Model downloaded successfully: {model_repo_id}",
-                    "model_name": model_name,
-                    "files": {
-                        "pth": target_pth_path,
-                        "index": target_index_path
-                    }
-                },
-                status_code=200
-            )
-        else:
-            return JSONResponse(
-                content={
-                    "status": "error",
-                    "message": result["body"]
-                },
-                status_code=400
-            )
-    except Exception as e:
-        return JSONResponse(
-            content={
-                "status": "error",
-                "message": f"Error processing model download: {str(e)}"
-            },
-            status_code=500
-        )
 
 @app.get("/list_models", tags=["models"])
 async def list_models():
