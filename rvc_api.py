@@ -368,7 +368,8 @@ if S3_ENABLED:
                 aws_secret_access_key=BUCKET_SECRET_ACCESS_KEY,
                 config=BotoConfig(
                     signature_version='s3v4',
-                    s3={'addressing_style': 'path'}  # path style works best with GCS
+                    request_checksum_calculation='when_required',   # REQUIRED WITH GCS
+                    response_checksum_validation='when_required',  # REQUIRED WITH GCS
                 ),
                 region_name=BUCKET_AREA
             )
