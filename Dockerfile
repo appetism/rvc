@@ -32,10 +32,11 @@ ENV index_root=logs
 ENV outside_index_root=assets/indices
 ENV rmvpe_root=assets/rmvpe
 
-COPY . .
+COPY requirements.txt ./
+RUN python3 -m pip install --upgrade pip==24.0 && \
+    python3 -m pip install --no-cache-dir -r requirements.txt
 
-RUN python3 -m pip install --upgrade pip==24.0
-RUN python3 -m pip install --no-cache-dir -r requirements.txt
+COPY . .
 
 RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/pretrained_v2/D40k.pth -d assets/pretrained_v2/ -o D40k.pth
 RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/pretrained_v2/G40k.pth -d assets/pretrained_v2/ -o G40k.pth
