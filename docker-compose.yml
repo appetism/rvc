@@ -7,6 +7,7 @@ services:
     container_name: rvc-container
     command: ["/usr/bin/supervisord"]
     environment:
+      - HF_TOKEN=${HF_TOKEN}
       - S3_ENABLED=${S3_ENABLED:-false}
       - BUCKET_AREA=${BUCKET_AREA}
       - S3_KEY_PREFIX=${S3_KEY_PREFIX}

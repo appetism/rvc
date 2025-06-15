@@ -24,6 +24,14 @@ RUN apt-get update && \
 # Set Python 3.9 as the default
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
 
+ENV OPENBLAS_NUM_THREADS=1
+ENV no_proxy="localhost,127.0.0.1,::1"
+ENV weight_root=assets/weights
+ENV weight_uvr5_root=assets/uvr5_weights
+ENV index_root=logs
+ENV outside_index_root=assets/indices
+ENV rmvpe_root=assets/rmvpe
+
 COPY . .
 
 RUN python3 -m pip install --upgrade pip==24.0
