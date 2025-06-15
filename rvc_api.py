@@ -286,38 +286,28 @@ async def voice2voice_url_s3(
     # Store original index_path to check if it was user-provided
     original_index_path_param = index_path
 
-    if "/" in model_name: # Check if model_name is a Hugging Face model ID
-        repo_id = model_name # Original model_name is the repo_id
-        print(f"Hugging Face model ID detected: {repo_id}. Checking for local model first.")
+    if "/" in model_name:  # Check if model_name is a Hugging Face model ID
+        repo_id = model_name  # Original model_name is the repo_id
+        print(f"Hugging Face model ID detected: {repo_id}")
 
-        # Sanitize repo_id to create a unique base name for model files
+        # Create standardized filenames from repo_id
         sanitized_repo_id = repo_id.replace("/", "_").replace("-", "_")
-        unique_pth_filename = f"{sanitized_repo_id}.pth"
-        unique_index_filename = f"{sanitized_repo_id}.index"
-        derived_rvc_model_name = sanitized_repo_id # This will be the model name for RVC
+        pth_filename = f"{sanitized_repo_id}.pth"
+        index_filename = f"{sanitized_repo_id}.index"
 
         # Define expected local paths
-        expected_pth_path = os.path.join(now_dir, "assets", "weights", unique_pth_filename)
-        expected_index_path = os.path.join(now_dir, "logs", unique_index_filename)
+        pth_path = os.path.join(now_dir, "assets", "weights", pth_filename)
+        index_path_local = os.path.join(now_dir, "logs", index_filename)
 
-        print(f"Expected local paths: PTH - {expected_pth_path}, INDEX - {expected_index_path}")
-
-        model_exists_locally = os.path.exists(expected_pth_path) and os.path.exists(expected_index_path)
+        # Check if model already exists locally
+        model_exists_locally = os.path.exists(pth_path) and os.path.exists(index_path_local)
 
         if model_exists_locally:
-            print(f"Model {repo_id} (as {derived_rvc_model_name}) already exists locally. Skipping download.")
-            model_name = derived_rvc_model_name # Use the sanitized name for infer
-            if original_index_path_param is None:
-                index_path = expected_index_path # Use local index path
-                print(f"Using local index path: {index_path}")
-            # If user provided an index_path, it remains unchanged
-            print(f"Proceeding with local RVC model: {model_name}, Index path: {index_path}")
+            print(f"Model {repo_id} already exists locally. Skipping download.")
         else:
-            print(f"Model {repo_id} not found locally or is incomplete. Proceeding with download.")
+            print(f"Downloading model {repo_id} from Hugging Face")
             try:
-                # hf_model_manager and executor are globally defined
-                # now_dir is globally defined
-                # shutil is imported
+                # Download model from Hugging Face
                 download_result = await asyncio.get_event_loop().run_in_executor(
                     executor, hf_model_manager.get_model, repo_id
                 )
@@ -329,91 +319,37 @@ async def voice2voice_url_s3(
                     )
 
                 model_info = download_result["body"]
-                # model_info["pth_path"] = path to .pth in HF cache
-                # model_info["index_path"] = path to .index in HF cache
 
-                # Sanitize repo_id to create a unique base name for model files
-                # Replace characters that are problematic in filenames or paths
-                # Example: "binant/calm_man-male" becomes "binant_calm_man_male"
-                sanitized_repo_id = repo_id.replace("/", "_").replace("-", "_")
+                # Ensure target directories exist
+                os.makedirs(os.path.join(now_dir, "assets", "weights"), exist_ok=True)
+                os.makedirs(os.path.join(now_dir, "logs"), exist_ok=True)
 
-                # Define unique filenames for the .pth and .index files using the sanitized repo_id
-                unique_pth_filename = f"{sanitized_repo_id}.pth"
-                unique_index_filename = f"{sanitized_repo_id}.index"
+                # Copy model files if needed
+                if os.path.exists(model_info["pth_path"]) and (
+                   not os.path.exists(pth_path) or
+                   os.path.getmtime(model_info["pth_path"]) > os.path.getmtime(pth_path)):
+                    print(f"Copying model weights to {pth_path}")
+                    shutil.copy2(model_info["pth_path"], pth_path)
 
-                # This is the model name RVC expects (filename without .pth extension),
-                # and also the directory name under logs. It's now based on the unique sanitized_repo_id.
-                derived_rvc_model_name = sanitized_repo_id
+                if os.path.exists(model_info["index_path"]) and (
+                   not os.path.exists(index_path_local) or
+                   os.path.getmtime(model_info["index_path"]) > os.path.getmtime(index_path_local)):
+                    print(f"Copying model index to {index_path_local}")
+                    shutil.copy2(model_info["index_path"], index_path_local)
 
-                # Ensure the target directory structure matches what RVC expects for loading
-                weights_dir = os.path.join(now_dir, "assets", "weights")
-                os.makedirs(weights_dir, exist_ok=True)
-
-                logs_dir = os.path.join(now_dir, "logs")
-
-                # Target paths in RVC structure using the new unique names
-                target_pth_path = os.path.join(weights_dir, unique_pth_filename)
-                target_index_path = os.path.join(logs_dir, unique_index_filename)
-
-                # Copy from HF cache to RVC structure if target doesn't exist or if cache is newer
-                # Ensure source file from HF cache exists before attempting to get its mtime
-                copy_pth = False
-                if os.path.exists(model_info["pth_path"]):
-                    if not os.path.exists(target_pth_path) or \
-                       os.path.getmtime(model_info["pth_path"]) > os.path.getmtime(target_pth_path):
-                        copy_pth = True
-
-                if copy_pth:
-                    print(f"Copying/updating model pth: {model_info['pth_path']} to {target_pth_path}")
-                    shutil.copy2(model_info["pth_path"], target_pth_path)
-                elif os.path.exists(target_pth_path):
-                    print(f"Model pth {target_pth_path} is already up to date.")
-                else:
-                    # This case should ideally not be reached if hf_model_manager.get_model succeeded
-                    # and returned a valid path, but as a fallback:
-                    print(f"Warning: Source model pth {model_info['pth_path']} not found, and target {target_pth_path} does not exist.")
-
-
-                copy_index = False
-                if os.path.exists(model_info["index_path"]):
-                    if not os.path.exists(target_index_path) or \
-                       os.path.getmtime(model_info["index_path"]) > os.path.getmtime(target_index_path):
-                        copy_index = True
-
-                if copy_index:
-                    print(f"Copying/updating model index: {model_info['index_path']} to {target_index_path}")
-                    shutil.copy2(model_info["index_path"], target_index_path)
-                elif os.path.exists(target_index_path):
-                    print(f"Model index {target_index_path} is already up to date.")
-                else:
-                    print(f"Warning: Source model index {model_info['index_path']} not found, and target {target_index_path} does not exist.")
-
-                # Update model_name for the infer() call to use the derived name
-                model_name = derived_rvc_model_name
-
-                # If user did not provide an index_path, use the one from the downloaded model
-                if original_index_path_param is None:
-                    # Ensure the target_index_path actually exists before assigning it
-                    if os.path.exists(target_index_path):
-                        index_path = target_index_path
-                        print(f"Using index path from downloaded model: {index_path}")
-                    else:
-                        print(f"Warning: Downloaded index path {target_index_path} does not exist. Index path remains as None or user-specified.")
-                # If user DID provide an index_path, it remains unchanged (respect user input)
-
-                print(f"Proceeding with RVC model: {model_name} (derived from {repo_id}), Index path: {index_path}")
-
-            except HTTPException as http_exc:
-                raise http_exc # Re-raise already formed HTTPExceptions
             except Exception as e:
-                # Catch any other error during the HF model processing
-                print(f"Error processing Hugging Face model {repo_id}: {str(e)}")
-                # Ensure model_name is reset or handled if it was partially changed and an error occurred
-                # For safety, could re-assign model_name = repo_id here if needed, but infer will likely fail.
                 raise HTTPException(
                     status_code=500,
-                    detail=f"An error occurred while processing Hugging Face model {repo_id}: {str(e)}"
+                    detail=f"Error downloading model {repo_id}: {str(e)}"
                 )
+
+        # Update model_name and index_path for inference
+        model_name = sanitized_repo_id
+
+        # Only use local index path if user didn't provide one
+        if original_index_path_param is None:
+            index_path = index_path_local
+            print(f"Using index path: {index_path}")
 
     # Check if S3 is configured and client is available
     if not S3_ENABLED or not s3_client:
@@ -644,7 +580,7 @@ async def list_models():
     - JSON with list of model names
     """
     try:
-        weights_dir = os.path.join(now_dir, "weights")
+        weights_dir = os.path.join(now_dir, "assets", "weights")
 
         if not os.path.exists(weights_dir):
             return JSONResponse(
