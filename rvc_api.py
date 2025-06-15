@@ -308,24 +308,28 @@ async def voice2voice_url_s3(
             # model_info["pth_path"] = path to .pth in HF cache
             # model_info["index_path"] = path to .index in HF cache
 
-            pth_basename = os.path.basename(model_info["pth_path"])
-            index_basename = os.path.basename(model_info["index_path"])
+            # Sanitize repo_id to create a unique base name for model files
+            # Replace characters that are problematic in filenames or paths
+            # Example: "binant/calm_man-male" becomes "binant_calm_man_male"
+            sanitized_repo_id = repo_id.replace("/", "_").replace("-", "_")
 
-            # This is the model name RVC expects (filename without .pth extension)
-            derived_rvc_model_name = os.path.splitext(pth_basename)[0]
+            # Define unique filenames for the .pth and .index files using the sanitized repo_id
+            unique_pth_filename = f"{sanitized_repo_id}.pth"
+            unique_index_filename = f"{sanitized_repo_id}.index"
+
+            # This is the model name RVC expects (filename without .pth extension),
+            # and also the directory name under logs. It's now based on the unique sanitized_repo_id.
+            derived_rvc_model_name = sanitized_repo_id
 
             # Ensure the target directory structure matches what RVC expects for loading
-            # The error log indicates it's looking in "assets/weights/"
-            weights_dir = os.path.join(now_dir, "assets", "weights") # Changed to use 'assets/weights'
-            os.makedirs(weights_dir, exist_ok=True) # Ensure the target weights directory exists
+            weights_dir = os.path.join(now_dir, "assets", "weights")
+            os.makedirs(weights_dir, exist_ok=True)
 
             logs_dir = os.path.join(now_dir, "logs")
 
-            # Target paths in RVC structure
-            target_pth_path = os.path.join(weights_dir, pth_basename)
-            model_specific_log_dir = os.path.join(logs_dir, derived_rvc_model_name)
-            os.makedirs(model_specific_log_dir, exist_ok=True) # Ensure log subdir for model exists
-            target_index_path = os.path.join(model_specific_log_dir, index_basename)
+            # Target paths in RVC structure using the new unique names
+            target_pth_path = os.path.join(weights_dir, unique_pth_filename)
+            target_index_path = os.path.join(logs_dir, unique_index_filename)
 
             # Copy from HF cache to RVC structure if target doesn't exist or if cache is newer
             # Ensure source file from HF cache exists before attempting to get its mtime
