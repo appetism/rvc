@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: rvc-container
+    command: ["/usr/bin/supervisord"]
     environment:
       - S3_ENABLED=${S3_ENABLED:-false}
       - BUCKET_AREA=${BUCKET_AREA}

@@ -1,0 +1,15 @@
+{
+    "input": {
+        "arguments": {
+            "audio_url": "https://storage.googleapis.com/binant_rvc/samples/record.wav",
+            "model_name": "binant/darth_vader-male",
+            "transpose": 0,
+            "pitch_extraction_algorithm": "crepe",
+            "search_feature_ratio": 0.76,
+            "filter_radius": 3,
+            "resample_output": 0,
+            "volume_envelope": 0.25,
+            "voiceless_protection": 0.1
+        }
+    }
+}
