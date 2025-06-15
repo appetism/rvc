@@ -7,7 +7,7 @@ on:
 
 env:
   REGISTRY: docker.io
-  IMAGE_NAME: ${{ github.repository_owner }}/rvc
+  IMAGE_NAME: tahaouarrak/rvc
   PLATFORMS: linux/amd64
 
 jobs:
@@ -46,19 +46,6 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
-
-      # Build and push standard Docker image
-      - name: Build and push standard Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          platforms: ${{ env.PLATFORMS }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
       # Build and push RunPod Docker image
       - name: Extract metadata for RunPod image
