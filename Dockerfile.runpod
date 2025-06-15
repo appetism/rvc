@@ -49,8 +49,4 @@ RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co
 
 VOLUME [ "/app/assets/weights", "/app/opt" ]
 
-COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-EXPOSE 7865 7866
-
-CMD ["/usr/bin/supervisord"]
+EXPOSE 7866

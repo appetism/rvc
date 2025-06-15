@@ -26,3 +26,7 @@ rmvpe.pt
 /assets/weights/*
 ffmpeg.*
 ffprobe.*
+
+.idea
+
+.env

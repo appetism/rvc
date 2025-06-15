@@ -218,7 +218,13 @@ class Pipeline(object):
         with torch.no_grad():
             logits = model.extract_features(**inputs)
             feats = model.final_proj(logits[0]) if version == "v1" else logits[0]
-        if protect < 0.5 and pitch is not None and pitchf is not None:
+
+        # Fix for TypeError: '<' not supported between instances of 'dict' and 'float'
+        protect_value = protect
+        if isinstance(protect, dict):
+            protect_value = 0.5  # Default value if protect is a dictionary
+
+        if protect_value < 0.5 and pitch is not None and pitchf is not None:
             feats0 = feats.clone()
         if (
             not isinstance(index, type(None))

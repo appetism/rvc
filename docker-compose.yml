@@ -1,20 +1,39 @@
 version: "3.8"
 services:
-  rvc:
+  web:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: rvc
+    container_name: rvc-container
+    command: ["/usr/bin/supervisord"]
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+      - S3_ENABLED=${S3_ENABLED:-false}
+      - BUCKET_AREA=${BUCKET_AREA}
+      - S3_KEY_PREFIX=${S3_KEY_PREFIX}
+      - BUCKET_ENDPOINT_URL=${BUCKET_ENDPOINT_URL}
+      - BUCKET_ACCESS_KEY_ID=${BUCKET_ACCESS_KEY_ID}
+      - BUCKET_SECRET_ACCESS_KEY=${BUCKET_SECRET_ACCESS_KEY}
+      - BUCKET_NAME=${BUCKET_NAME}
     volumes:
       - ./weights:/app/assets/weights
       - ./opt:/app/opt
+      - ./logs:/app/logs
+      - ./infer/lib:/app/infer/lib
+      - ./rvc_api.py:/app/rvc_api.py
       # - ./dataset:/app/dataset # you can use this folder in order to provide your dataset for model training
     ports:
       - 7865:7865
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+      - 7866:7866
+#    deploy:
+#      resources:
+#        limits:
+#          cpus: '4'    # Limit to 8 CPUs
+#          memory: 12G     # Limit to 12 GB of memory
+#        reservations:
+#          cpus: '4'    # Reserve 4 CPUs
+#          memory: 8G     # Reserve 8 GB of memory
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
