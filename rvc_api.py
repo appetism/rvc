@@ -253,8 +253,8 @@ async def voice2voice_url(
 async def voice2voice_url_s3(
         background_tasks: BackgroundTasks,
         input_url: str = Form(...),
-        model_name: str = Form(...),
-        index_path: str = Form(None),
+        model_name: str = Form(...), # This will be updated if it's an HF ID
+        index_path: str = Form(None), # This will be updated if HF model and index_path was None
         f0up_key: int = Form(0),
         f0method: str = Form("rmvpe"),
         index_rate: float = Form(0.66),
@@ -271,7 +271,7 @@ async def voice2voice_url_s3(
 
     Parameters:
     - input_url: URL to the .wav file to be converted
-    - model_name: the name of the model as found in the logs directory
+    - model_name: the name of the model as found in the logs directory, or a Hugging Face repo ID (e.g., username/model-name)
     - index_path: optional path to an index file of the trained model
     - f0up_key: frequency key shifting, 0 (no shift) or 1
     - f0method: method for fundamental frequency extraction (harvest, pm, crepe, rmvpe)
@@ -283,6 +283,106 @@ async def voice2voice_url_s3(
     - rms_mix_rate: rate to mix in RMS normalization
     - protect: protection factor to prevent clipping
     """
+    # Store original index_path to check if it was user-provided
+    original_index_path_param = index_path
+
+    if "/" in model_name: # Check if model_name is a Hugging Face model ID
+        repo_id = model_name # Original model_name is the repo_id
+        print(f"Hugging Face model ID detected: {repo_id}. Ensuring model is available locally.")
+
+        try:
+            # hf_model_manager and executor are globally defined
+            # now_dir is globally defined
+            # shutil is imported
+            download_result = await asyncio.get_event_loop().run_in_executor(
+                executor, hf_model_manager.get_model, repo_id
+            )
+
+            if download_result["statusCode"] != 200:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Failed to retrieve model {repo_id} from Hugging Face: {download_result['body']}"
+                )
+
+            model_info = download_result["body"]
+            # model_info["pth_path"] = path to .pth in HF cache
+            # model_info["index_path"] = path to .index in HF cache
+
+            pth_basename = os.path.basename(model_info["pth_path"])
+            index_basename = os.path.basename(model_info["index_path"])
+
+            # This is the model name RVC expects (filename without .pth extension)
+            derived_rvc_model_name = os.path.splitext(pth_basename)[0]
+
+            weights_dir = os.path.join(now_dir, "weights")
+            logs_dir = os.path.join(now_dir, "logs")
+
+            # Target paths in RVC structure
+            target_pth_path = os.path.join(weights_dir, pth_basename)
+            model_specific_log_dir = os.path.join(logs_dir, derived_rvc_model_name)
+            os.makedirs(model_specific_log_dir, exist_ok=True) # Ensure log subdir for model exists
+            target_index_path = os.path.join(model_specific_log_dir, index_basename)
+
+            # Copy from HF cache to RVC structure if target doesn't exist or if cache is newer
+            # Ensure source file from HF cache exists before attempting to get its mtime
+            copy_pth = False
+            if os.path.exists(model_info["pth_path"]):
+                if not os.path.exists(target_pth_path) or \
+                   os.path.getmtime(model_info["pth_path"]) > os.path.getmtime(target_pth_path):
+                    copy_pth = True
+
+            if copy_pth:
+                print(f"Copying/updating model pth: {model_info['pth_path']} to {target_pth_path}")
+                shutil.copy2(model_info["pth_path"], target_pth_path)
+            elif os.path.exists(target_pth_path):
+                print(f"Model pth {target_pth_path} is already up to date.")
+            else:
+                # This case should ideally not be reached if hf_model_manager.get_model succeeded
+                # and returned a valid path, but as a fallback:
+                print(f"Warning: Source model pth {model_info['pth_path']} not found, and target {target_pth_path} does not exist.")
+
+
+            copy_index = False
+            if os.path.exists(model_info["index_path"]):
+                if not os.path.exists(target_index_path) or \
+                   os.path.getmtime(model_info["index_path"]) > os.path.getmtime(target_index_path):
+                    copy_index = True
+
+            if copy_index:
+                print(f"Copying/updating model index: {model_info['index_path']} to {target_index_path}")
+                shutil.copy2(model_info["index_path"], target_index_path)
+            elif os.path.exists(target_index_path):
+                print(f"Model index {target_index_path} is already up to date.")
+            else:
+                print(f"Warning: Source model index {model_info['index_path']} not found, and target {target_index_path} does not exist.")
+
+            # Update model_name for the infer() call to use the derived name
+            model_name = derived_rvc_model_name
+
+            # If user did not provide an index_path, use the one from the downloaded model
+            if original_index_path_param is None:
+                # Ensure the target_index_path actually exists before assigning it
+                if os.path.exists(target_index_path):
+                    index_path = target_index_path
+                    print(f"Using index path from downloaded model: {index_path}")
+                else:
+                    print(f"Warning: Downloaded index path {target_index_path} does not exist. Index path remains as None or user-specified.")
+            # If user DID provide an index_path, it remains unchanged (respect user input)
+
+            print(f"Proceeding with RVC model: {model_name} (derived from {repo_id}), Index path: {index_path}")
+
+        except HTTPException as http_exc:
+            raise http_exc # Re-raise already formed HTTPExceptions
+        except Exception as e:
+            # Catch any other error during the HF model processing
+            print(f"Error processing Hugging Face model {repo_id}: {str(e)}")
+            # Ensure model_name is reset or handled if it was partially changed and an error occurred
+            # For safety, could re-assign model_name = repo_id here if needed, but infer will likely fail.
+            raise HTTPException(
+                status_code=500,
+                detail=f"An error occurred while processing Hugging Face model {repo_id}: {str(e)}"
+            )
+
     # Check if S3 is configured and client is available
     if not S3_ENABLED or not s3_client:
         raise HTTPException(status_code=500, detail="S3 upload functionality is not enabled or configured correctly. Check server logs and S3_ENABLED, BUCKET_ENDPOINT_URL, etc. environment variables.")
