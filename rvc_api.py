@@ -6,6 +6,9 @@ import uvicorn
 import asyncio
 import uuid
 import boto3
+import huggingface_hub
+import json
+import shutil
 from botocore.client import Config as BotoConfig
 
 from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTasks, File, Form, Depends
@@ -31,6 +34,10 @@ tags = [
     {
         "name": "voice2voice",
         "description": "Voice2Voice conversion using the pretrained model"
+    },
+    {
+        "name": "models",
+        "description": "Model management endpoints for downloading from Hugging Face"
     }
 ]
 
@@ -393,5 +400,219 @@ else:
 
 # create model cache
 model_cache = ModelCache()
+
+class HuggingFaceModelManager:
+    """
+    Model manager for downloading and verifying models from Hugging Face Hub.
+    """
+    def __init__(self):
+        hf_token = os.environ.get("HF_TOKEN", None)
+        if hf_token is not None:
+            huggingface_hub.login(token=hf_token)
+            print("Logged in to Hugging Face Hub successfully")
+        else:
+            print("Warning: HF_TOKEN not found in environment variables. Anonymous access will be used, which may have rate limits.")
+
+    def verify_config(self, config):
+        """
+        Verify that the model config meets the required format.
+        """
+        # Check existence of required fields
+        if 'arch_type' not in config:
+            return {"statusCode": 400, "body": "arch_type not found"}
+
+        if 'arch_version' not in config:
+            return {"statusCode": 400, "body": "arch_version not found"}
+
+        if 'components' not in config:
+            return {"statusCode": 400, "body": "components not found"}
+
+        # Check field types
+        if not isinstance(config['arch_type'], str):
+            return {"statusCode": 400, "body": "arch_type must be str"}
+
+        if not isinstance(config['arch_version'], str):
+            return {"statusCode": 400, "body": "arch_version must be str"}
+
+        if not isinstance(config['components'], dict):
+            return {"statusCode": 400, "body": "components must be dict"}
+
+        # Validate architecture type
+        if config['arch_type'] != "rvc":
+            return {"statusCode": 400, "body": "arch_type must be 'rvc'"}
+
+        # Check required components
+        if "pth" not in config['components']:
+            return {"statusCode": 400, "body": "components['pth'] not found"}
+
+        if "index" not in config['components']:
+            return {"statusCode": 400, "body": "components['index'] not found"}
+
+        return None
+
+    def get_model(self, model_name):
+        """
+        Download a model and its components from Hugging Face Hub.
+
+        Args:
+            model_name (str): The Hugging Face repository ID (e.g., username/model-name)
+
+        Returns:
+            dict: Response with status code and body containing model information
+        """
+        try:
+            print(f"Downloading config for model: {model_name}")
+            config_path = huggingface_hub.hf_hub_download(
+                repo_id=model_name,
+                filename="config.json",
+                repo_type="model")
+
+            with open(config_path, "r") as f:
+                config = json.load(f)
+
+            check = self.verify_config(config)
+            if check is not None:
+                return check
+
+            print(f"Downloading model file: {config['components']['pth']}")
+            pth_path = huggingface_hub.hf_hub_download(
+                repo_id=model_name,
+                filename=config['components']['pth'],
+                repo_type="model")
+
+            print(f"Downloading index file: {config['components']['index']}")
+            index_path = huggingface_hub.hf_hub_download(
+                repo_id=model_name,
+                filename=config['components']['index'],
+                repo_type="model")
+
+            print("Model download complete")
+            return {
+                "statusCode": 200,
+                "body": {
+                    "config": config,
+                    "pth_path": pth_path,
+                    "index_path": index_path
+                }
+            }
+        except Exception as e:
+            error_message = f"Error downloading model: {str(e)}"
+            print(error_message)
+            return {"statusCode": 400, "body": error_message}
+
+# Initialize HF Model Manager
+hf_model_manager = HuggingFaceModelManager()
+
+@app.post("/download_model", tags=["models"])
+async def download_model(model_repo_id: str = Form(...)):
+    """
+    Download a model from Hugging Face Hub.
+
+    Parameters:
+    - model_repo_id: The Hugging Face repository ID (e.g., username/model-name)
+
+    Returns:
+    - JSON with model information or error details
+    """
+    try:
+        result = await asyncio.get_event_loop().run_in_executor(
+            executor, hf_model_manager.get_model, model_repo_id
+        )
+
+        if result["statusCode"] == 200:
+            model_info = result["body"]
+
+            # Get model name from pth file (without .pth extension)
+            pth_filename = os.path.basename(model_info["pth_path"])
+            model_name = os.path.splitext(pth_filename)[0]
+
+            # Copy model files to expected locations
+            weights_dir = os.path.join(now_dir, "weights")
+            logs_dir = os.path.join(now_dir, "logs")
+
+            # Create directories if they don't exist
+            os.makedirs(weights_dir, exist_ok=True)
+            os.makedirs(os.path.join(logs_dir, model_name), exist_ok=True)
+
+            # Copy or symlink files to the right locations
+            target_pth_path = os.path.join(weights_dir, pth_filename)
+            target_index_path = os.path.join(logs_dir, model_name, os.path.basename(model_info["index_path"]))
+
+            # Only copy if not already in the correct location
+            if model_info["pth_path"] != target_pth_path:
+                shutil.copy2(model_info["pth_path"], target_pth_path)
+
+            if model_info["index_path"] != target_index_path:
+                shutil.copy2(model_info["index_path"], target_index_path)
+
+            return JSONResponse(
+                content={
+                    "status": "success",
+                    "message": f"Model downloaded successfully: {model_repo_id}",
+                    "model_name": model_name,
+                    "files": {
+                        "pth": target_pth_path,
+                        "index": target_index_path
+                    }
+                },
+                status_code=200
+            )
+        else:
+            return JSONResponse(
+                content={
+                    "status": "error",
+                    "message": result["body"]
+                },
+                status_code=400
+            )
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "error",
+                "message": f"Error processing model download: {str(e)}"
+            },
+            status_code=500
+        )
+
+@app.get("/list_models", tags=["models"])
+async def list_models():
+    """
+    List all available models in the weights directory.
+
+    Returns:
+    - JSON with list of model names
+    """
+    try:
+        weights_dir = os.path.join(now_dir, "weights")
+
+        if not os.path.exists(weights_dir):
+            return JSONResponse(
+                content={
+                    "status": "success",
+                    "models": []
+                }
+            )
+
+        models = [
+            os.path.splitext(file)[0]
+            for file in os.listdir(weights_dir)
+            if file.endswith(".pth")
+        ]
+
+        return JSONResponse(
+            content={
+                "status": "success",
+                "models": models
+            }
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={
+                "status": "error",
+                "message": f"Error listing models: {str(e)}"
+            },
+            status_code=500
+        )
+
 # start uvicorn server
 uvicorn.run(app, host="0.0.0.0", port=7866)
