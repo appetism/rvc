@@ -276,9 +276,9 @@ async def voice2voice_url_s3(
     - rms_mix_rate: rate to mix in RMS normalization
     - protect: protection factor to prevent clipping
     """
-    # Check if S3 is enabled
-    if not S3_ENABLED:
-        raise HTTPException(status_code=500, detail="S3 upload functionality is not enabled. Set S3_ENABLED=True in environment variables.")
+    # Check if S3 is configured and client is available
+    if not S3_ENABLED or not s3_client:
+        raise HTTPException(status_code=500, detail="S3 upload functionality is not enabled or configured correctly. Check server logs and S3_ENABLED, BUCKET_ENDPOINT_URL, etc. environment variables.")
 
     # Validate URL
     if not input_url.startswith('http://') and not input_url.startswith('https://'):
@@ -287,7 +287,8 @@ async def voice2voice_url_s3(
     # Generate a unique filename for S3
     file_extension = 'wav'
     file_uuid = str(uuid.uuid4())
-    s3_key = f"{file_uuid}.{file_extension}"
+    file_name = f"{file_uuid}.{file_extension}"
+    s3_key = f"{S3_KEY_PREFIX}/{file_name}" if S3_KEY_PREFIX else file_name
 
     # Call the infer function
     try:
@@ -330,30 +331,64 @@ def status():
     return {"status": "ok"}
 
 # Load S3 configuration from environment variables
-S3_ENABLED = os.environ.get("S3_ENABLED", "False").lower() == "true"
+S3_ENABLED = os.environ.get("S3_ENABLED", "false").lower() == 'true' # Treat as boolean
+s3_client = None
+BUCKET_NAME = None # Will be sourced from env var if S3 is enabled
+
 if S3_ENABLED:
-    BUCKET_AREA = os.environ.get("BUCKET_AREA", "us-east-1")
+    BUCKET_AREA = os.environ.get("BUCKET_AREA", None)
     BUCKET_ENDPOINT_URL = os.environ.get("BUCKET_ENDPOINT_URL", None)
     BUCKET_ACCESS_KEY_ID = os.environ.get("BUCKET_ACCESS_KEY_ID", None)
     BUCKET_SECRET_ACCESS_KEY = os.environ.get("BUCKET_SECRET_ACCESS_KEY", None)
-    BUCKET_NAME = os.environ.get("BUCKET_NAME", None)
+    BUCKET_NAME = os.environ.get("BUCKET_NAME", None) # Get BUCKET_NAME directly
+    S3_KEY_PREFIX = os.environ.get("S3_KEY_PREFIX", "").strip('/')
 
-    # Initialize S3 client
-    s3_session = boto3.Session(
-        aws_access_key_id=BUCKET_ACCESS_KEY_ID,
-        aws_secret_access_key=BUCKET_SECRET_ACCESS_KEY,
-        region_name=BUCKET_AREA
-    )
+    missing_configs = []
+    if not BUCKET_ENDPOINT_URL:
+        missing_configs.append("BUCKET_ENDPOINT_URL")
+    if not BUCKET_ACCESS_KEY_ID:
+        missing_configs.append("BUCKET_ACCESS_KEY_ID")
+    if not BUCKET_SECRET_ACCESS_KEY:
+        missing_configs.append("BUCKET_SECRET_ACCESS_KEY")
+    if not BUCKET_AREA:
+        missing_configs.append("BUCKET_AREA")
+    if not BUCKET_NAME: # Add BUCKET_NAME to the check
+        missing_configs.append("BUCKET_NAME")
 
-    s3_client = s3_session.client(
-        's3',
-        endpoint_url=BUCKET_ENDPOINT_URL,
-        config=BotoConfig(signature_version='s3v4', region_name=BUCKET_AREA)
-    )
+    if missing_configs:
+        print(f"Error: The following S3 environment variables are not set, but S3_ENABLED is 'true': {', '.join(missing_configs)}. S3 functionality will be disabled.")
+        s3_client = None # Ensure client is None if config is incomplete
+    else:
+        try:
+            # Initialize S3 client
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=BUCKET_ENDPOINT_URL,
+                aws_access_key_id=BUCKET_ACCESS_KEY_ID,
+                aws_secret_access_key=BUCKET_SECRET_ACCESS_KEY,
+                config=BotoConfig(
+                    signature_version='s3v4',
+                    s3={'addressing_style': 'path'}  # path style works best with GCS
+                ),
+                region_name=BUCKET_AREA
+            )
 
-    print("S3 Configuration loaded successfully.")
+            print("S3 Configuration loaded successfully.")
+            print(f"  S3_ENABLED: {S3_ENABLED}")
+            print(f"  BUCKET_NAME: {BUCKET_NAME}") # Log the directly sourced BUCKET_NAME
+
+            print(f"  BUCKET_AREA: {BUCKET_AREA}")
+            print(f"  BUCKET_ENDPOINT_URL: {BUCKET_ENDPOINT_URL}")
+            print(f"  BUCKET_ACCESS_KEY_ID: {BUCKET_ACCESS_KEY_ID[:4]}...{BUCKET_ACCESS_KEY_ID[-4:] if BUCKET_ACCESS_KEY_ID and len(BUCKET_ACCESS_KEY_ID) > 8 else '****'}")
+            print(f"  BUCKET_SECRET_ACCESS_KEY: {BUCKET_SECRET_ACCESS_KEY[:4]}...{BUCKET_SECRET_ACCESS_KEY[-4:] if BUCKET_SECRET_ACCESS_KEY and len(BUCKET_SECRET_ACCESS_KEY) > 8 else '****'}")
+            print(f"  S3_KEY_PREFIX: {S3_KEY_PREFIX if S3_KEY_PREFIX else 'None'}")
+            # BUCKET_SECRET_ACCESS_KEY is sensitive, so not printing even partial
+
+        except Exception as e:
+            print(f"Error initializing S3 client: {e}. S3 functionality will be disabled.")
+            s3_client = None # Ensure client is None on error
 else:
-    print("S3 upload functionality is disabled. Set S3_ENABLED=True to enable it.")
+    print("S3 upload functionality is not enabled (S3_ENABLED environment variable is not set to 'true').")
 
 # create model cache
 model_cache = ModelCache()
