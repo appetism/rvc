@@ -255,15 +255,15 @@ async def voice2voice_url_s3(
         input_url: str = Form(...),
         model_name: str = Form(...), # This will be updated if it's an HF ID
         index_path: str = Form(None), # This will be updated if HF model and index_path was None
-        f0up_key: int = Form(0),
-        f0method: str = Form("rmvpe"),
-        index_rate: float = Form(0.66),
+        transpose: int = Form(0),  # Renamed from f0up_key
+        pitch_extraction_algorithm: str = Form("rmvpe"),  # Renamed from f0method
+        search_feature_ratio: float = Form(0.66),  # Renamed from index_rate
         device: str = Form(None),
         is_half: bool = Form(False),
         filter_radius: int = Form(3),
-        resample_sr: int = Form(0),
-        rms_mix_rate: float = Form(1),
-        protect: float = Form(0.33)
+        resample_output: int = Form(0),  # Renamed from resample_sr
+        volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
+        voiceless_protection: float = Form(0.33)  # Renamed from protect
 ):
     """
     Endpoint to convert voices from a URL audio file using a specified model,
@@ -273,15 +273,16 @@ async def voice2voice_url_s3(
     - input_url: URL to the .wav file to be converted
     - model_name: the name of the model as found in the logs directory, or a Hugging Face repo ID (e.g., username/model-name)
     - index_path: optional path to an index file of the trained model
-    - f0up_key: frequency key shifting, 0 (no shift) or 1
-    - f0method: method for fundamental frequency extraction (harvest, pm, crepe, rmvpe)
-    - index_rate: the rate at which to use the indexing file
+    - transpose: frequency key shifting, 0 (no shift) or any integer value
+    - pitch_extraction_algorithm: method for fundamental frequency extraction (harvest, pm, dio, crepe, crepe-tiny, rmvpe)
+    - search_feature_ratio: the rate at which to use the indexing file (between 0 and 1)
     - device: computation device (cuda, cpu, cuda:0, cuda:1, etc.)
     - is_half: whether to use half precision for the model
-    - filter_radius: radius of the filter used in processing
-    - resample_sr: resample rate, if needed (0 for no resampling)
-    - rms_mix_rate: rate to mix in RMS normalization
-    - protect: protection factor to prevent clipping
+    - filter_radius: radius of the filter used in processing (between 0 and 7)
+    - resample_output: resample rate, if needed (0 for no resampling)
+    - volume_envelope: rate to mix in RMS normalization (between 0 and 1)
+    - voiceless_protection: protection factor to prevent clipping (between 0 and 1)
+    - hop_len: hop length for audio processing (between 0 and 512)
     """
     # Store original index_path to check if it was user-provided
     original_index_path_param = index_path
@@ -365,10 +366,13 @@ async def voice2voice_url_s3(
     file_name = f"{file_uuid}.{file_extension}"
     s3_key = f"{S3_KEY_PREFIX}/{file_name}" if S3_KEY_PREFIX else file_name
 
-    # Call the infer function
+    # Call the infer function with the renamed parameters
     try:
         wf = await asyncio.get_event_loop().run_in_executor(
-            executor, infer, input_url, model_name, index_path, f0up_key, f0method, index_rate, device, is_half, filter_radius, resample_sr, rms_mix_rate, protect
+            executor, infer, input_url, model_name, index_path, transpose, pitch_extraction_algorithm,
+            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
+            voiceless_protection
+            # Note: hop_len is not passed to infer since the current implementation doesn't support it
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
