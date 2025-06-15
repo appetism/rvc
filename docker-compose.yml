@@ -5,6 +5,13 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: rvc-container
+    environment:
+      - S3_ENABLED=${S3_ENABLED:-false}
+      - BUCKET_AREA=${BUCKET_AREA}
+      - BUCKET_ENDPOINT_URL=${BUCKET_ENDPOINT_URL}
+      - BUCKET_ACCESS_KEY_ID=${BUCKET_ACCESS_KEY_ID}
+      - BUCKET_SECRET_ACCESS_KEY=${BUCKET_SECRET_ACCESS_KEY}
+      - BUCKET_NAME=${BUCKET_NAME}
     volumes:
       - ./weights:/app/assets/weights
       - ./opt:/app/opt

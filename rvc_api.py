@@ -4,9 +4,12 @@ import sys
 import fastapi
 import uvicorn
 import asyncio
+import uuid
+import boto3
+from botocore.client import Config as BotoConfig
 
 from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTasks, File, Form, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from io import BytesIO
 from dotenv import load_dotenv
 from scipy.io import wavfile
@@ -239,9 +242,118 @@ async def voice2voice_url(
     # Return the response
     return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
 
+@app.post("/voice2voice_url_s3", tags=["voice2voice"])
+async def voice2voice_url_s3(
+        background_tasks: BackgroundTasks,
+        input_url: str = Form(...),
+        model_name: str = Form(...),
+        index_path: str = Form(None),
+        f0up_key: int = Form(0),
+        f0method: str = Form("rmvpe"),
+        index_rate: float = Form(0.66),
+        device: str = Form(None),
+        is_half: bool = Form(False),
+        filter_radius: int = Form(3),
+        resample_sr: int = Form(0),
+        rms_mix_rate: float = Form(1),
+        protect: float = Form(0.33)
+):
+    """
+    Endpoint to convert voices from a URL audio file using a specified model,
+    then upload the result to S3 and return the S3 URL.
+
+    Parameters:
+    - input_url: URL to the .wav file to be converted
+    - model_name: the name of the model as found in the logs directory
+    - index_path: optional path to an index file of the trained model
+    - f0up_key: frequency key shifting, 0 (no shift) or 1
+    - f0method: method for fundamental frequency extraction (harvest, pm, crepe, rmvpe)
+    - index_rate: the rate at which to use the indexing file
+    - device: computation device (cuda, cpu, cuda:0, cuda:1, etc.)
+    - is_half: whether to use half precision for the model
+    - filter_radius: radius of the filter used in processing
+    - resample_sr: resample rate, if needed (0 for no resampling)
+    - rms_mix_rate: rate to mix in RMS normalization
+    - protect: protection factor to prevent clipping
+    """
+    # Check if S3 is enabled
+    if not S3_ENABLED:
+        raise HTTPException(status_code=500, detail="S3 upload functionality is not enabled. Set S3_ENABLED=True in environment variables.")
+
+    # Validate URL
+    if not input_url.startswith('http://') and not input_url.startswith('https://'):
+        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+
+    # Generate a unique filename for S3
+    file_extension = 'wav'
+    file_uuid = str(uuid.uuid4())
+    s3_key = f"{file_uuid}.{file_extension}"
+
+    # Call the infer function
+    try:
+        wf = await asyncio.get_event_loop().run_in_executor(
+            executor, infer, input_url, model_name, index_path, f0up_key, f0method, index_rate, device, is_half, filter_radius, resample_sr, rms_mix_rate, protect
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        # Upload the processed file to S3
+        s3_client.upload_fileobj(wf, BUCKET_NAME, s3_key)
+
+        # Generate a presigned URL for the uploaded file
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': BUCKET_NAME,
+                'Key': s3_key
+            },
+            ExpiresIn=3600  # URL expires in 1 hour
+        )
+
+        # Return the S3 URL in JSON response
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Audio processed and uploaded successfully",
+                "audio_url": presigned_url
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uploading to S3: {str(e)}")
+    finally:
+        # Clean up the BytesIO object
+        background_tasks.add_task(wf.close)
+
 @app.get("/status")
 def status():
     return {"status": "ok"}
+
+# Load S3 configuration from environment variables
+S3_ENABLED = os.environ.get("S3_ENABLED", "False").lower() == "true"
+if S3_ENABLED:
+    BUCKET_AREA = os.environ.get("BUCKET_AREA", "us-east-1")
+    BUCKET_ENDPOINT_URL = os.environ.get("BUCKET_ENDPOINT_URL", None)
+    BUCKET_ACCESS_KEY_ID = os.environ.get("BUCKET_ACCESS_KEY_ID", None)
+    BUCKET_SECRET_ACCESS_KEY = os.environ.get("BUCKET_SECRET_ACCESS_KEY", None)
+    BUCKET_NAME = os.environ.get("BUCKET_NAME", None)
+
+    # Initialize S3 client
+    s3_session = boto3.Session(
+        aws_access_key_id=BUCKET_ACCESS_KEY_ID,
+        aws_secret_access_key=BUCKET_SECRET_ACCESS_KEY,
+        region_name=BUCKET_AREA
+    )
+
+    s3_client = s3_session.client(
+        's3',
+        endpoint_url=BUCKET_ENDPOINT_URL,
+        config=BotoConfig(signature_version='s3v4', region_name=BUCKET_AREA)
+    )
+
+    print("S3 Configuration loaded successfully.")
+else:
+    print("S3 upload functionality is disabled. Set S3_ENABLED=True to enable it.")
 
 # create model cache
 model_cache = ModelCache()
