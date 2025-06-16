@@ -5,6 +5,19 @@ import json
 from services.voice_conversion_service import process_voice_to_s3, infer
 from fastapi import BackgroundTasks
 
+def ensure_directory(path):
+    """Create directory if it doesn't exist, preserving symlinks."""
+    if os.path.islink(path):
+        target = os.readlink(path)
+        if not os.path.exists(target):
+            print(f"Creating target directory for symlink {path} -> {target}")
+            os.makedirs(target, exist_ok=True)
+    elif not os.path.exists(path):
+        print(f"Creating directory: {path}")
+        os.makedirs(path, exist_ok=True)
+    else:
+        print(f"Directory already exists: {path}")
+
 # --- Helper Functions ---
 def error_response(message, status_code=400):
     return {
@@ -121,5 +134,8 @@ async def handler(job):  # MODIFIED: Made handler async
 
 # --- Main Execution ---
 if __name__ == "__main__":
+    ensure_directory("/runpod-volume/assets/weights")
+    ensure_directory("/runpod-volume/opt")
+    print("Directory check completed")
     print("Starting RunPod handler for RVC voice conversion...")
     runpod.serverless.start({"handler": handler})
