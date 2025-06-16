@@ -1,7 +1,9 @@
 version: "3.8"
 services:
   web:
-    image: rvc-serverless:150620251050
+    build:
+      context: .
+      dockerfile: Dockerfile.runpod
     container_name: rvc-container-runpod
     command: ["python3", "/app/runpod_handler.py"]
     environment:
