@@ -1,0 +1,235 @@
+import os
+import uuid
+import boto3
+import asyncio
+from io import BytesIO
+from botocore.client import Config as BotoConfig
+from fastapi import HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
+from concurrent.futures import ThreadPoolExecutor
+
+# Create executor for async operations
+executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4))
+
+# Load S3 configuration from environment variables
+S3_ENABLED = os.environ.get("S3_ENABLED", "false").lower() == 'true'
+s3_client = None
+BUCKET_NAME = None
+
+if S3_ENABLED:
+    BUCKET_AREA = os.environ.get("BUCKET_AREA", None)
+    BUCKET_ENDPOINT_URL = os.environ.get("BUCKET_ENDPOINT_URL", None)
+    BUCKET_ACCESS_KEY_ID = os.environ.get("BUCKET_ACCESS_KEY_ID", None)
+    BUCKET_SECRET_ACCESS_KEY = os.environ.get("BUCKET_SECRET_ACCESS_KEY", None)
+    BUCKET_NAME = os.environ.get("BUCKET_NAME", None)
+    S3_KEY_PREFIX = os.environ.get("S3_KEY_PREFIX", "").strip('/')
+
+    missing_configs = []
+    if not BUCKET_ENDPOINT_URL:
+        missing_configs.append("BUCKET_ENDPOINT_URL")
+    if not BUCKET_ACCESS_KEY_ID:
+        missing_configs.append("BUCKET_ACCESS_KEY_ID")
+    if not BUCKET_SECRET_ACCESS_KEY:
+        missing_configs.append("BUCKET_SECRET_ACCESS_KEY")
+    if not BUCKET_AREA:
+        missing_configs.append("BUCKET_AREA")
+    if not BUCKET_NAME:
+        missing_configs.append("BUCKET_NAME")
+
+    if missing_configs:
+        print(f"Error: The following S3 environment variables are not set, but S3_ENABLED is 'true': {', '.join(missing_configs)}. S3 functionality will be disabled.")
+        s3_client = None
+    else:
+        try:
+            # Initialize S3 client
+            s3_client = boto3.client(
+                's3',
+                endpoint_url=BUCKET_ENDPOINT_URL,
+                aws_access_key_id=BUCKET_ACCESS_KEY_ID,
+                aws_secret_access_key=BUCKET_SECRET_ACCESS_KEY,
+                config=BotoConfig(
+                    signature_version='s3v4',
+                    request_checksum_calculation='when_required',   # REQUIRED WITH GCS
+                    response_checksum_validation='when_required',  # REQUIRED WITH GCS
+                ),
+                region_name=BUCKET_AREA
+            )
+
+            print("S3 Configuration loaded successfully.")
+            print(f"  S3_ENABLED: {S3_ENABLED}")
+            print(f"  BUCKET_NAME: {BUCKET_NAME}")
+            print(f"  BUCKET_AREA: {BUCKET_AREA}")
+            print(f"  BUCKET_ENDPOINT_URL: {BUCKET_ENDPOINT_URL}")
+            print(f"  BUCKET_ACCESS_KEY_ID: {BUCKET_ACCESS_KEY_ID[:4]}...{BUCKET_ACCESS_KEY_ID[-4:] if BUCKET_ACCESS_KEY_ID and len(BUCKET_ACCESS_KEY_ID) > 8 else '****'}")
+            print(f"  S3_KEY_PREFIX: {S3_KEY_PREFIX if S3_KEY_PREFIX else 'None'}")
+
+        except Exception as e:
+            print(f"Error initializing S3 client: {e}. S3 functionality will be disabled.")
+            s3_client = None
+else:
+    print("S3 upload functionality is not enabled (S3_ENABLED environment variable is not set to 'true').")
+    S3_KEY_PREFIX = ""
+
+async def process_voice_to_s3(
+    background_tasks: BackgroundTasks,
+    input_url: str,
+    model_name: str,
+    index_path: str,
+    transpose: int,
+    pitch_extraction_algorithm: str,
+    search_feature_ratio: float,
+    device: str,
+    is_half: bool,
+    filter_radius: int,
+    resample_output: int,
+    volume_envelope: float,
+    voiceless_protection: float,
+    infer_function,
+    hf_model_manager,
+    now_dir
+):
+    """
+    Process voice conversion and upload the result to S3.
+
+    Args:
+        background_tasks: FastAPI BackgroundTasks object
+        input_url: URL to the audio file to be converted
+        model_name: Model name or Hugging Face repo ID
+        index_path: Path to the index file
+        transpose: Frequency key shifting value
+        pitch_extraction_algorithm: Method for fundamental frequency extraction
+        search_feature_ratio: Rate for indexing file usage
+        device: Computation device
+        is_half: Whether to use half precision
+        filter_radius: Radius of the filter used in processing
+        resample_output: Resample rate
+        volume_envelope: Rate to mix in RMS normalization
+        voiceless_protection: Protection factor to prevent clipping
+        infer_function: The infer function to use for voice conversion
+        hf_model_manager: Hugging Face model manager instance
+        now_dir: Current working directory
+
+    Returns:
+        JSONResponse with the S3 URL
+    """
+
+    print("Processing voice conversion and uploading to S3...")
+    # Check if S3 is configured and client is available
+    if not S3_ENABLED or not s3_client:
+        raise HTTPException(status_code=500, detail="S3 upload functionality is not enabled or configured correctly. Check server logs and S3_ENABLED, BUCKET_ENDPOINT_URL, etc. environment variables.")
+
+    # Validate URL
+    if not input_url.startswith('http://') and not input_url.startswith('https://'):
+        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+
+    # Store original index_path to check if it was user-provided
+    original_index_path_param = index_path
+
+    if "/" in model_name:  # Check if model_name is a Hugging Face model ID
+        repo_id = model_name  # Original model_name is the repo_id
+        print(f"Hugging Face model ID detected: {repo_id}")
+
+        # Create standardized filenames from repo_id
+        sanitized_repo_id = repo_id.replace("/", "_").replace("-", "_")
+        pth_filename = f"{sanitized_repo_id}.pth"
+        index_filename = f"{sanitized_repo_id}.index"
+
+        # Define expected local paths
+        pth_path = os.path.join(now_dir, "assets", "weights", pth_filename)
+        index_path_local = os.path.join(now_dir, "logs", index_filename)
+
+        # Check if model already exists locally
+        model_exists_locally = os.path.exists(pth_path) and os.path.exists(index_path_local)
+
+        if model_exists_locally:
+            print(f"Model {repo_id} already exists locally. Skipping download.")
+        else:
+            print(f"Downloading model {repo_id} from Hugging Face")
+            try:
+                # Download model from Hugging Face
+                download_result = await asyncio.get_event_loop().run_in_executor(
+                    executor, hf_model_manager.get_model, repo_id
+                )
+
+                if download_result["statusCode"] != 200:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Failed to retrieve model {repo_id} from Hugging Face: {download_result['body']}"
+                    )
+
+                model_info = download_result["body"]
+
+                # Ensure target directories exist
+                os.makedirs(os.path.join(now_dir, "assets", "weights"), exist_ok=True)
+                os.makedirs(os.path.join(now_dir, "logs"), exist_ok=True)
+
+                # Copy model files if needed
+                if os.path.exists(model_info["pth_path"]) and (
+                   not os.path.exists(pth_path) or
+                   os.path.getmtime(model_info["pth_path"]) > os.path.getmtime(pth_path)):
+                    print(f"Copying model weights to {pth_path}")
+                    shutil.copy2(model_info["pth_path"], pth_path)
+
+                if os.path.exists(model_info["index_path"]) and (
+                   not os.path.exists(index_path_local) or
+                   os.path.getmtime(model_info["index_path"]) > os.path.getmtime(index_path_local)):
+                    print(f"Copying model index to {index_path_local}")
+                    shutil.copy2(model_info["index_path"], index_path_local)
+
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error downloading model {repo_id}: {str(e)}"
+                )
+
+        # Update model_name and index_path for inference
+        model_name = sanitized_repo_id
+
+        # Only use local index path if user didn't provide one
+        if original_index_path_param is None:
+            index_path = index_path_local
+            print(f"Using index path: {index_path}")
+
+    # Generate a unique filename for S3
+    file_extension = 'wav'
+    file_uuid = str(uuid.uuid4())
+    file_name = f"{file_uuid}.{file_extension}"
+    s3_key = f"{S3_KEY_PREFIX}/{file_name}" if S3_KEY_PREFIX else file_name
+
+    # Call the infer function with the renamed parameters
+    try:
+        wf = await asyncio.get_event_loop().run_in_executor(
+            executor, infer_function, input_url, model_name, index_path, transpose, pitch_extraction_algorithm,
+            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
+            voiceless_protection
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    try:
+        # Upload the processed file to S3
+        s3_client.upload_fileobj(wf, BUCKET_NAME, s3_key)
+
+        # Generate a presigned URL for the uploaded file
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': BUCKET_NAME,
+                'Key': s3_key
+            },
+            ExpiresIn=3600  # URL expires in 1 hour
+        )
+
+        # Return the S3 URL in JSON response
+        return JSONResponse(
+            content={
+                "status": "success",
+                "message": "Audio processed and uploaded successfully",
+                "audio_url": presigned_url
+            }
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uploading to S3: {str(e)}")
+    finally:
+        # Clean up the BytesIO object
+        background_tasks.add_task(wf.close)
