@@ -1,24 +1,11 @@
-from typing import Union
 import os
 import sys
-import fastapi
 import uvicorn
-import asyncio
-import uuid
-import huggingface_hub
-import json
-import shutil
-
 from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTasks, File, Form, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
-from io import BytesIO
 from dotenv import load_dotenv
 from scipy.io import wavfile
-from configs.config import Config
-from infer.modules.vc.modules import VC
-from concurrent.futures import ThreadPoolExecutor
-from services.voice_conversion_service import process_voice_to_s3, infer
-from services.model_cache_service import ModelCache
+from services.voice_conversion_service import infer
 
 # don't like settings paths like this at all but due bad code its necessary
 now_dir = os.getcwd()
@@ -29,19 +16,6 @@ print(now_dir)
 load_dotenv()
 
 app = FastAPI()
-
-tags = [
-    {
-        "name": "voice2voice",
-        "description": "Voice2Voice conversion using the pretrained model"
-    },
-    {
-        "name": "models",
-        "description": "Model management endpoints for downloading from Hugging Face"
-    }
-]
-
-executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4))  # Adjust based on your server's capability
 
 @app.post("/voice2voice", tags=["voice2voice"])
 async def voice2voice(
@@ -81,22 +55,30 @@ async def voice2voice(
     # Ensure input file is closed after reading
     await input_file.close()
 
-    # Call the infer function
+    # Use the service function to process the request
     try:
-        # Create a new BytesIO object for each request
-        wf = await asyncio.get_event_loop().run_in_executor(
-            executor, infer, audio_bytes, model_name, index_path, transpose, pitch_extraction_algorithm,
-            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
-            voiceless_protection
+        from services.voice_conversion_service import process_voice_to_voice
+
+        wf = await process_voice_to_voice(
+            background_tasks=background_tasks,
+            audio_bytes=audio_bytes,
+            model_name=model_name,
+            index_path=index_path,
+            transpose=transpose,
+            pitch_extraction_algorithm=pitch_extraction_algorithm,
+            search_feature_ratio=search_feature_ratio,
+            device=device,
+            is_half=is_half,
+            filter_radius=filter_radius,
+            resample_output=resample_output,
+            volume_envelope=volume_envelope,
+            voiceless_protection=voiceless_protection
         )
+
+        # Return the response
+        return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-    # Schedule the close operation for after the response is sent
-    background_tasks.add_task(wf.close)
-
-    # Return the response
-    return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
 
 @app.post("/voice2voice_url", tags=["voice2voice"])
 async def voice2voice_url(
@@ -131,25 +113,30 @@ async def voice2voice_url(
     - volume_envelope: rate to mix in RMS normalization (between 0 and 1)
     - voiceless_protection: protection factor to prevent clipping (between 0 and 1)
     """
-    # Validate URL
-    if not input_url.startswith('http://') and not input_url.startswith('https://'):
-        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
-
-    # Call the infer function
+    # Use the service function to process the request
     try:
-        wf = await asyncio.get_event_loop().run_in_executor(
-            executor, infer, input_url, model_name, index_path, transpose, pitch_extraction_algorithm,
-            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
-            voiceless_protection
+        from services.voice_conversion_service import process_voice_url_to_voice
+
+        wf = await process_voice_url_to_voice(
+            background_tasks=background_tasks,
+            input_url=input_url,
+            model_name=model_name,
+            index_path=index_path,
+            transpose=transpose,
+            pitch_extraction_algorithm=pitch_extraction_algorithm,
+            search_feature_ratio=search_feature_ratio,
+            device=device,
+            is_half=is_half,
+            filter_radius=filter_radius,
+            resample_output=resample_output,
+            volume_envelope=volume_envelope,
+            voiceless_protection=voiceless_protection
         )
+
+        # Return the response
+        return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-    # Schedule the close operation for after the response is sent
-    background_tasks.add_task(wf.close)
-
-    # Return the response
-    return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
 
 @app.post("/voice2voice_url_s3", tags=["voice2voice"])
 async def voice2voice_url_s3(
@@ -185,6 +172,8 @@ async def voice2voice_url_s3(
     - volume_envelope: rate to mix in RMS normalization (between 0 and 1)
     - voiceless_protection: protection factor to prevent clipping (between 0 and 1)
     """
+    from services.voice_conversion_service import process_voice_to_s3
+
     # Use the service function to process the request
     return await process_voice_to_s3(
         background_tasks=background_tasks,

@@ -361,3 +361,109 @@ def infer(
     wavfile.write(wf, wav_opt[0], wav_opt[1])
     wf.seek(0)
     return wf
+
+async def process_voice_to_voice(
+    background_tasks: BackgroundTasks,
+    audio_bytes: bytes,
+    model_name: str,
+    index_path: str,
+    transpose: int,
+    pitch_extraction_algorithm: str,
+    search_feature_ratio: float,
+    device: str,
+    is_half: bool,
+    filter_radius: int,
+    resample_output: int,
+    volume_envelope: float,
+    voiceless_protection: float
+):
+    """
+    Process voice conversion from uploaded audio bytes.
+
+    Args:
+        background_tasks: FastAPI BackgroundTasks object
+        audio_bytes: The raw audio bytes from the uploaded file
+        model_name: Model name to use for voice conversion
+        index_path: Path to the index file
+        transpose: Frequency key shifting value
+        pitch_extraction_algorithm: Method for fundamental frequency extraction
+        search_feature_ratio: Rate for indexing file usage
+        device: Computation device
+        is_half: Whether to use half precision
+        filter_radius: Radius of the filter used in processing
+        resample_output: Resample rate
+        volume_envelope: Rate to mix in RMS normalization
+        voiceless_protection: Protection factor to prevent clipping
+
+    Returns:
+        BytesIO object containing the processed audio
+    """
+    try:
+        # Call the infer function
+        wf = await asyncio.get_event_loop().run_in_executor(
+            executor, infer, audio_bytes, model_name, index_path, transpose, pitch_extraction_algorithm,
+            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
+            voiceless_protection
+        )
+
+        # Schedule the close operation for after the response is sent
+        background_tasks.add_task(wf.close)
+
+        return wf
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def process_voice_url_to_voice(
+    background_tasks: BackgroundTasks,
+    input_url: str,
+    model_name: str,
+    index_path: str,
+    transpose: int,
+    pitch_extraction_algorithm: str,
+    search_feature_ratio: float,
+    device: str,
+    is_half: bool,
+    filter_radius: int,
+    resample_output: int,
+    volume_envelope: float,
+    voiceless_protection: float
+):
+    """
+    Process voice conversion from a URL to an audio file.
+
+    Args:
+        background_tasks: FastAPI BackgroundTasks object
+        input_url: URL to the audio file to be converted
+        model_name: Model name to use for voice conversion
+        index_path: Path to the index file
+        transpose: Frequency key shifting value
+        pitch_extraction_algorithm: Method for fundamental frequency extraction
+        search_feature_ratio: Rate for indexing file usage
+        device: Computation device
+        is_half: Whether to use half precision
+        filter_radius: Radius of the filter used in processing
+        resample_output: Resample rate
+        volume_envelope: Rate to mix in RMS normalization
+        voiceless_protection: Protection factor to prevent clipping
+
+    Returns:
+        BytesIO object containing the processed audio
+    """
+    # Validate URL
+    if not input_url.startswith('http://') and not input_url.startswith('https://'):
+        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+
+    try:
+        # Call the infer function
+        wf = await asyncio.get_event_loop().run_in_executor(
+            executor, infer, input_url, model_name, index_path, transpose, pitch_extraction_algorithm,
+            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
+            voiceless_protection
+        )
+
+        # Schedule the close operation for after the response is sent
+        background_tasks.add_task(wf.close)
+
+        return wf
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
