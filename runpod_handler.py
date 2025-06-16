@@ -1,6 +1,7 @@
-import runpod
 import os
+import runpod
 import json
+
 from services.voice_conversion_service import process_voice_to_s3, infer
 from fastapi import BackgroundTasks
 
@@ -122,4 +123,3 @@ async def handler(job):  # MODIFIED: Made handler async
 if __name__ == "__main__":
     print("Starting RunPod handler for RVC voice conversion...")
     runpod.serverless.start({"handler": handler})
-

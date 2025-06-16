@@ -5,7 +5,6 @@ services:
     container_name: rvc-container-runpod
     command: ["python3", "/app/runpod_handler.py"]
     environment:
-      - LD_PRELOAD=/usr/local/lib/python3.9/dist-packages/faiss_cpu.libs/libgomp-d22c30c5.so.1.0.0
       - HF_TOKEN=${HF_TOKEN}
       - S3_ENABLED=${S3_ENABLED:-false}
       - BUCKET_AREA=${BUCKET_AREA}

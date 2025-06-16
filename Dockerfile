@@ -24,14 +24,6 @@ RUN apt-get update && \
 # Set Python 3.9 as the default
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.9 1
 
-ENV OPENBLAS_NUM_THREADS=1
-ENV no_proxy="localhost,127.0.0.1,::1"
-ENV weight_root=assets/weights
-ENV weight_uvr5_root=assets/uvr5_weights
-ENV index_root=logs
-ENV outside_index_root=assets/indices
-ENV rmvpe_root=assets/rmvpe
-
 COPY requirements.txt ./
 RUN python3 -m pip install --upgrade pip==24.0 && \
     python3 -m pip install --no-cache-dir -r requirements.txt
@@ -46,6 +38,15 @@ RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co
 RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/uvr5_weights/HP5-主旋律人声vocals+其他instrumentals.pth -d assets/uvr5_weights/ -o HP5-主旋律人声vocals+其他instrumentals.pth
 RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/hubert_base.pt -d assets/hubert -o hubert_base.pt
 RUN aria2c --console-log-level=error -c -x 16 -s 16 -k 1M https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/rmvpe.pt -d assets/rmvpe -o rmvpe.pt
+
+ENV OPENBLAS_NUM_THREADS=1
+ENV no_proxy="localhost,127.0.0.1,::1"
+ENV weight_root=assets/weights
+ENV weight_uvr5_root=assets/uvr5_weights
+ENV index_root=logs
+ENV outside_index_root=assets/indices
+ENV rmvpe_root=assets/rmvpe
+ENV LD_PRELOAD="/usr/local/lib/python3.9/dist-packages/faiss_cpu.libs/libgomp-d22c30c5.so.1.0.0"
 
 VOLUME [ "/app/assets/weights", "/app/opt" ]
 
