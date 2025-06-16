@@ -7,11 +7,11 @@ import requests
 import shutil
 from typing import Union
 from io import BytesIO
-from botocore.client import Config as BotoConfig
-from fastapi import HTTPException, BackgroundTasks
-from fastapi.responses import JSONResponse
+from botocore.client import Config as BotoConfig # type: ignore
+from fastapi import BackgroundTasks
+from fastapi.responses import JSONResponse # type: ignore
 from concurrent.futures import ThreadPoolExecutor
-from scipy.io import wavfile
+from scipy.io import wavfile # type: ignore
 from .model_manager_service import HuggingFaceModelManager
 from .model_cache_service import ModelCache
 
@@ -81,7 +81,7 @@ else:
     S3_KEY_PREFIX = ""
 
 async def process_voice_to_s3(
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks, # type: ignore
     input_url: str,
     model_name: str,
     index_path: str,
@@ -125,11 +125,13 @@ async def process_voice_to_s3(
     print("Processing voice conversion and uploading to S3...")
     # Check if S3 is configured and client is available
     if not S3_ENABLED or not s3_client:
-        raise HTTPException(status_code=500, detail="S3 upload functionality is not enabled or configured correctly. Check server logs and S3_ENABLED, BUCKET_ENDPOINT_URL, etc. environment variables.")
+        # Raise ValueError instead of HTTPException
+        raise ValueError("S3 upload functionality is not enabled or configured correctly. Check server logs and S3_ENABLED, BUCKET_ENDPOINT_URL, etc. environment variables.")
 
     # Validate URL
     if not input_url.startswith('http://') and not input_url.startswith('https://'):
-        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+        # Raise ValueError instead of HTTPException
+        raise ValueError("Invalid URL. Must start with http:// or https://")
 
     # Initialize HF Model Manager
     hf_model_manager = HuggingFaceModelManager()
@@ -164,9 +166,9 @@ async def process_voice_to_s3(
                 )
 
                 if download_result["statusCode"] != 200:
-                    raise HTTPException(
-                        status_code=500,
-                        detail=f"Failed to retrieve model {repo_id} from Hugging Face: {download_result['body']}"
+                    # Raise ValueError instead of HTTPException
+                    raise ValueError(
+                        f"Failed to retrieve model {repo_id} from Hugging Face: {download_result['body']}"
                     )
 
                 model_info = download_result["body"]
@@ -189,10 +191,8 @@ async def process_voice_to_s3(
                     shutil.copy2(model_info["index_path"], index_path_local)
 
             except Exception as e:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"Error downloading model {repo_id}: {str(e)}"
-                )
+                # Raise RuntimeError instead of HTTPException
+                raise RuntimeError(f"Error downloading model {repo_id}: {str(e)}")
 
         # Update model_name and index_path for inference
         model_name = sanitized_repo_id
@@ -216,7 +216,8 @@ async def process_voice_to_s3(
             voiceless_protection
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Re-raise the exception to be caught by rvc_api.py
+        raise RuntimeError(str(e))
 
     try:
         # Upload the processed file to S3
@@ -241,7 +242,8 @@ async def process_voice_to_s3(
             }
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error uploading to S3: {str(e)}")
+        # Raise RuntimeError instead of HTTPException
+        raise RuntimeError(f"Error uploading to S3: {str(e)}")
     finally:
         # Clean up the BytesIO object
         background_tasks.add_task(wf.close)
@@ -363,7 +365,7 @@ def infer(
     return wf
 
 async def process_voice_to_voice(
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks, # type: ignore
     audio_bytes: bytes,
     model_name: str,
     index_path: str,
@@ -411,10 +413,11 @@ async def process_voice_to_voice(
 
         return wf
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Re-raise the exception to be caught by rvc_api.py
+        raise RuntimeError(str(e))
 
 async def process_voice_url_to_voice(
-    background_tasks: BackgroundTasks,
+    background_tasks: BackgroundTasks, # type: ignore
     input_url: str,
     model_name: str,
     index_path: str,
@@ -451,7 +454,8 @@ async def process_voice_url_to_voice(
     """
     # Validate URL
     if not input_url.startswith('http://') and not input_url.startswith('https://'):
-        raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+        # Raise ValueError instead of HTTPException
+        raise ValueError("Invalid URL. Must start with http:// or https://")
 
     try:
         # Call the infer function
@@ -466,4 +470,5 @@ async def process_voice_url_to_voice(
 
         return wf
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Re-raise the exception to be caught by rvc_api.py
+        raise RuntimeError(str(e))

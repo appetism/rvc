@@ -1,10 +1,10 @@
 import os
 import sys
-import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTasks, File, Form, Depends
-from fastapi.responses import StreamingResponse, JSONResponse
-from dotenv import load_dotenv
-from scipy.io import wavfile
+import uvicorn  # type: ignore
+from fastapi import FastAPI, HTTPException, UploadFile, BackgroundTasks, File, Form  # type: ignore
+from fastapi.responses import StreamingResponse, JSONResponse  # type: ignore
+from dotenv import load_dotenv  # type: ignore
+from scipy.io import wavfile  # type: ignore
 from services.voice_conversion_service import infer
 
 # don't like settings paths like this at all but due bad code its necessary
@@ -17,21 +17,22 @@ load_dotenv()
 
 app = FastAPI()
 
+
 @app.post("/voice2voice", tags=["voice2voice"])
 async def voice2voice(
-        background_tasks: BackgroundTasks,
-        input_file: UploadFile = File(...),
-        model_name: str = Form(...),
-        index_path: str = Form(None),
-        transpose: int = Form(0),  # Renamed from f0up_key
-        pitch_extraction_algorithm: str = Form("rmvpe"),  # Renamed from f0method
-        search_feature_ratio: float = Form(0.66),  # Renamed from index_rate
-        device: str = Form(None),
-        is_half: bool = Form(False),
-        filter_radius: int = Form(3),
-        resample_output: int = Form(0),  # Renamed from resample_sr
-        volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
-        voiceless_protection: float = Form(0.33)  # Renamed from protect
+    background_tasks: BackgroundTasks,
+    input_file: UploadFile = File(...),
+    model_name: str = Form(...),
+    index_path: str = Form(None),
+    transpose: int = Form(0),  # Renamed from f0up_key
+    pitch_extraction_algorithm: str = Form("rmvpe"),  # Renamed from f0method
+    search_feature_ratio: float = Form(0.66),  # Renamed from index_rate
+    device: str = Form(None),
+    is_half: bool = Form(False),
+    filter_radius: int = Form(3),
+    resample_output: int = Form(0),  # Renamed from resample_sr
+    volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
+    voiceless_protection: float = Form(0.33)  # Renamed from protect
 ):
     """
     Endpoint to convert voices from one type to another using a specified model.
@@ -77,24 +78,29 @@ async def voice2voice(
 
         # Return the response
         return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except RuntimeError as re:
+        raise HTTPException(status_code=500, detail=str(re))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
 
 @app.post("/voice2voice_url", tags=["voice2voice"])
 async def voice2voice_url(
-        background_tasks: BackgroundTasks,
-        input_url: str = Form(...),
-        model_name: str = Form(...),
-        index_path: str = Form(None),
-        transpose: int = Form(0),  # Renamed from f0up_key
-        pitch_extraction_algorithm: str = Form("rmvpe"),  # Renamed from f0method
-        search_feature_ratio: float = Form(0.66),  # Renamed from index_rate
-        device: str = Form(None),
-        is_half: bool = Form(False),
-        filter_radius: int = Form(3),
-        resample_output: int = Form(0),  # Renamed from resample_sr
-        volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
-        voiceless_protection: float = Form(0.33)  # Renamed from protect
+    background_tasks: BackgroundTasks,
+    input_url: str = Form(...),
+    model_name: str = Form(...),
+    index_path: str = Form(None),
+    transpose: int = Form(0),  # Renamed from f0up_key
+    pitch_extraction_algorithm: str = Form("rmvpe"),  # Renamed from f0method
+    search_feature_ratio: float = Form(0.66),  # Renamed from index_rate
+    device: str = Form(None),
+    is_half: bool = Form(False),
+    filter_radius: int = Form(3),
+    resample_output: int = Form(0),  # Renamed from resample_sr
+    volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
+    voiceless_protection: float = Form(0.33)  # Renamed from protect
 ):
     """
     Endpoint to convert voices from a URL audio file using a specified model.
@@ -135,24 +141,29 @@ async def voice2voice_url(
 
         # Return the response
         return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except RuntimeError as re:
+        raise HTTPException(status_code=500, detail=str(re))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
 
 @app.post("/voice2voice_url_s3", tags=["voice2voice"])
 async def voice2voice_url_s3(
-        background_tasks: BackgroundTasks,
-        input_url: str = Form(...),
-        model_name: str = Form(...), # This will be updated if it's an HF ID
-        index_path: str = Form(None), # This will be updated if HF model and index_path was None
-        transpose: int = Form(0),  # Renamed from f0up_key
-        pitch_extraction_algorithm: str = Form("rmvpe"),  # Renamed from f0method
-        search_feature_ratio: float = Form(0.66),  # Renamed from index_rate
-        device: str = Form(None),
-        is_half: bool = Form(False),
-        filter_radius: int = Form(3),
-        resample_output: int = Form(0),  # Renamed from resample_sr
-        volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
-        voiceless_protection: float = Form(0.33)  # Renamed from protect
+    background_tasks: BackgroundTasks,
+    input_url: str = Form(...),
+    model_name: str = Form(...),  # This will be updated if it's an HF ID
+    index_path: str = Form(None),  # This will be updated if HF model and index_path was None
+    transpose: int = Form(0),  # Renamed from f0up_key
+    pitch_extraction_algorithm: str = Form("rmvpe"),  # Renamed from f0method
+    search_feature_ratio: float = Form(0.66),  # Renamed from index_rate
+    device: str = Form(None),
+    is_half: bool = Form(False),
+    filter_radius: int = Form(3),
+    resample_output: int = Form(0),  # Renamed from resample_sr
+    volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
+    voiceless_protection: float = Form(0.33)  # Renamed from protect
 ):
     """
     Endpoint to convert voices from a URL audio file using a specified model,
@@ -175,27 +186,37 @@ async def voice2voice_url_s3(
     from services.voice_conversion_service import process_voice_to_s3
 
     # Use the service function to process the request
-    return await process_voice_to_s3(
-        background_tasks=background_tasks,
-        input_url=input_url,
-        model_name=model_name,
-        index_path=index_path,
-        transpose=transpose,
-        pitch_extraction_algorithm=pitch_extraction_algorithm,
-        search_feature_ratio=search_feature_ratio,
-        device=device,
-        is_half=is_half,
-        filter_radius=filter_radius,
-        resample_output=resample_output,
-        volume_envelope=volume_envelope,
-        voiceless_protection=voiceless_protection,
-        infer_function=infer,
-        now_dir=now_dir
-    )
+    try:
+        response = await process_voice_to_s3(
+            background_tasks=background_tasks,
+            input_url=input_url,
+            model_name=model_name,
+            index_path=index_path,
+            transpose=transpose,
+            pitch_extraction_algorithm=pitch_extraction_algorithm,
+            search_feature_ratio=search_feature_ratio,
+            device=device,
+            is_half=is_half,
+            filter_radius=filter_radius,
+            resample_output=resample_output,
+            volume_envelope=volume_envelope,
+            voiceless_protection=voiceless_protection,
+            infer_function=infer,
+            now_dir=now_dir
+        )
+        return response
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except RuntimeError as re:
+        raise HTTPException(status_code=500, detail=str(re))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+
 
 @app.get("/status")
 def status():
     return {"status": "ok"}
+
 
 @app.get("/list_models", tags=["models"])
 async def list_models():
