@@ -18,6 +18,7 @@ from configs.config import Config
 from infer.modules.vc.modules import VC
 from concurrent.futures import ThreadPoolExecutor
 from services.voice_conversion_service import process_voice_to_s3, infer
+from services.model_cache_service import ModelCache
 
 # don't like settings paths like this at all but due bad code its necessary
 now_dir = os.getcwd()
@@ -40,25 +41,7 @@ tags = [
     }
 ]
 
-class ModelCache:
-    """
-    This class is used to cache the models so that they don't need to be loaded every time
-    """
-    def __init__(self):
-        self.models = {}
-
-    def load_model(self, model_name: str, device: str = None, is_half: bool = True):
-        if model_name not in self.models:
-            config = Config() # config_file_folder="A:/projects/Retrieval-based-Voice-Conversion-WebUI/configs/")
-            config.device = device if device else config.device
-            config.is_half = is_half if is_half else config.is_half
-            vc = VC(config)
-            vc.get_vc(f"{model_name}.pth")
-            self.models[model_name] = vc
-        return self.models[model_name]
-
 executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4))  # Adjust based on your server's capability
-
 
 @app.post("/voice2voice", tags=["voice2voice"])
 async def voice2voice(
@@ -224,10 +207,6 @@ async def voice2voice_url_s3(
 @app.get("/status")
 def status():
     return {"status": "ok"}
-
-# create model cache
-model_cache = ModelCache()
-
 
 @app.get("/list_models", tags=["models"])
 async def list_models():
