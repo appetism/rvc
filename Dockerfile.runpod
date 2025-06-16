@@ -80,6 +80,14 @@ ENV OPENBLAS_NUM_THREADS=1 \
     rmvpe_root=assets/rmvpe \
     LD_PRELOAD="/usr/local/lib/python3.9/dist-packages/faiss_cpu.libs/libgomp-d22c30c5.so.1.0.0"
 
-VOLUME ["/app/assets/weights", "/app/opt"]
+# Create target directories in /runpod-volume and symlink app directories to them
+RUN mkdir -p /runpod-volume/assets/weights && \
+    mkdir -p /runpod-volume/opt && \
+    rm -rf /app/assets/weights && \
+    ln -s /runpod-volume/assets/weights /app/assets/weights && \
+    rm -rf /app/opt && \
+    ln -s /runpod-volume/opt /app/opt \
+
+VOLUME ["/runpod-volume"]
 
 EXPOSE 7866
