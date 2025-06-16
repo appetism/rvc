@@ -18,17 +18,18 @@ def ensure_directory(path):
     else:
         print(f"Directory already exists: {path}")
 
-# --- Helper Functions ---
+
 def error_response(message, status_code=400):
     return {
-        "error": {
-            "message": str(message),
-            "status_code": status_code
-        }
+        "statusCode": status_code,
+        "body": message
     }
 
-def success_response(data):
-    return {"output": data}
+def success_response(msg):
+    return {
+        "statusCode": 200,
+        "body": msg
+    }
 
 # --- Argument Validation ---
 def validate_job_input(job_input):
