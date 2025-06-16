@@ -82,10 +82,13 @@ ENV OPENBLAS_NUM_THREADS=1 \
 # Create target directories in /runpod-volume and symlink app directories to them
 RUN mkdir -p /runpod-volume/assets/weights && \
     mkdir -p /runpod-volume/opt && \
+    mkdir -p /runpod-volume/logs && \
     rm -rf /app/assets/weights && \
     ln -s /runpod-volume/assets/weights /app/assets/weights && \
     rm -rf /app/opt && \
     ln -s /runpod-volume/opt /app/opt && \
+    rm -rf /app/logs && \
+    ln -s /runpod-volume/logs /app/logs && \
     chmod -R 777 /runpod-volume
 
 

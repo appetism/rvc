@@ -140,6 +140,7 @@ async def handler(job):  # MODIFIED: Made handler async
 # --- Main Execution ---
 if __name__ == "__main__":
     ensure_directory("/runpod-volume/assets/weights")
+    ensure_directory("/runpod-volume/logs")
     ensure_directory("/runpod-volume/opt")
     print("Directory check completed")
     print("Starting RunPod handler for RVC voice conversion...")
