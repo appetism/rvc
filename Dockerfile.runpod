@@ -4,6 +4,10 @@ FROM nvidia/cuda:11.6.2-cudnn8-runtime-ubuntu20.04
 
 WORKDIR /app
 
+# Set timezone data to non-interactive
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
 # Combine apt operations and use parallel downloads
 RUN apt-get update && \
     apt-get install -y -qq --no-install-recommends \
