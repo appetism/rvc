@@ -7,6 +7,7 @@ from botocore.client import Config as BotoConfig
 from fastapi import HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from concurrent.futures import ThreadPoolExecutor
+from model_manager_service import HuggingFaceModelManager
 
 # Create executor for async operations
 executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4))
@@ -85,7 +86,6 @@ async def process_voice_to_s3(
     volume_envelope: float,
     voiceless_protection: float,
     infer_function,
-    hf_model_manager,
     now_dir
 ):
     """
@@ -121,6 +121,9 @@ async def process_voice_to_s3(
     # Validate URL
     if not input_url.startswith('http://') and not input_url.startswith('https://'):
         raise HTTPException(status_code=400, detail="Invalid URL. Must start with http:// or https://")
+
+    # Initialize HF Model Manager
+    hf_model_manager = HuggingFaceModelManager()
 
     # Store original index_path to check if it was user-provided
     original_index_path_param = index_path

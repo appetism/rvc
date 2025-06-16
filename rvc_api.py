@@ -303,7 +303,6 @@ async def voice2voice_url_s3(
         volume_envelope=volume_envelope,
         voiceless_protection=voiceless_protection,
         infer_function=infer,
-        hf_model_manager=hf_model_manager,
         now_dir=now_dir
     )
 
@@ -314,8 +313,6 @@ def status():
 # create model cache
 model_cache = ModelCache()
 
-# Initialize HF Model Manager
-hf_model_manager = HuggingFaceModelManager()
 
 @app.get("/list_models", tags=["models"])
 async def list_models():
