@@ -9,7 +9,6 @@ from typing import Union
 from io import BytesIO
 from botocore.client import Config as BotoConfig # type: ignore
 from fastapi import BackgroundTasks
-from fastapi.responses import JSONResponse # type: ignore
 from concurrent.futures import ThreadPoolExecutor
 from scipy.io import wavfile # type: ignore
 from .model_manager_service import HuggingFaceModelManager
@@ -234,13 +233,11 @@ async def process_voice_to_s3(
         )
 
         # Return the S3 URL in JSON response
-        return JSONResponse(
-            content={
-                "status": "success",
-                "message": "Audio processed and uploaded successfully",
-                "audio_url": presigned_url
-            }
-        )
+        return {
+            "status": "success",
+            "message": "Audio processed and uploaded successfully",
+            "audio_url": presigned_url
+        }
     except Exception as e:
         # Raise RuntimeError instead of HTTPException
         raise RuntimeError(f"Error uploading to S3: {str(e)}")

@@ -103,16 +103,15 @@ async def handler(job):  # MODIFIED: Made handler async
         )
 
         # The response from process_voice_to_s3 is assumed to be a dictionary directly
-        api_response_data = response
         print(f"Voice conversion completed: {response}")
 
         # Execute any background tasks for cleanup
-        await background_tasks()  # MODIFIED: Awaited background_tasks
+        await background_tasks()
 
-        if api_response_data.get("status") == "success" and "audio_url" in api_response_data:
-            return success_response({"s3_url": api_response_data["audio_url"], "message": api_response_data.get("message")})
+        if response.get("status") == "success" and "audio_url" in response:
+            return success_response({"s3_url": response["audio_url"], "message": response.get("message")})
         else:
-            error_msg = api_response_data.get("detail") or api_response_data.get("message") or "Unknown error from voice conversion"
+            error_msg = response.get("detail") or response.get("message") or "Unknown error from voice conversion"
             return error_response(f"Voice conversion failed: {error_msg}", status_code=500)
 
     except Exception as e:
