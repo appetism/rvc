@@ -12,11 +12,15 @@ def ensure_directory(path):
         if not os.path.exists(target):
             print(f"Creating target directory for symlink {path} -> {target}")
             os.makedirs(target, exist_ok=True)
+        else:
+            print(f"Target directory for symlink {path} -> {target} already exists.")
+            print(f"Contents of target directory {target}: {os.listdir(target)}")
     elif not os.path.exists(path):
         print(f"Creating directory: {path}")
         os.makedirs(path, exist_ok=True)
     else:
         print(f"Directory already exists: {path}")
+        print(f"Contents of {path}: {os.listdir(path)}")
 
 
 def error_response(message, status_code=400):
