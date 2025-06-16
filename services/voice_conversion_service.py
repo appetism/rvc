@@ -2,12 +2,17 @@ import os
 import uuid
 import boto3
 import asyncio
+import tempfile
+import requests
+import shutil
+from typing import Union
 from io import BytesIO
 from botocore.client import Config as BotoConfig
 from fastapi import HTTPException, BackgroundTasks
 from fastapi.responses import JSONResponse
 from concurrent.futures import ThreadPoolExecutor
-from model_manager_service import HuggingFaceModelManager
+from scipy.io import wavfile
+from .model_manager_service import HuggingFaceModelManager
 
 # Create executor for async operations
 executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4))
@@ -236,3 +241,119 @@ async def process_voice_to_s3(
     finally:
         # Clean up the BytesIO object
         background_tasks.add_task(wf.close)
+
+def infer(
+        input: Union[str, bytes], # filepath, URL or raw bytes
+        model_name: str,
+        index_path: str = None,
+        f0up_key: int = 0,
+        f0method: str = "crepe",
+        index_rate: float = 0.66,
+        device: str = None,
+        is_half: bool = False,
+        filter_radius: int = 3,
+        resample_sr: int = 0,
+        rms_mix_rate: float = 1,
+        protect: float = 0.33,
+        **kwargs
+):
+    """
+    Perform voice conversion inference.
+
+    Args:
+        input: filepath, URL or raw bytes of audio input
+        model_name: name of the model to use
+        index_path: path to the index file
+        f0up_key: frequency key shifting value
+        f0method: method for fundamental frequency extraction
+        index_rate: rate for indexing file usage
+        device: computation device (cuda, cpu, etc.)
+        is_half: whether to use half precision
+        filter_radius: radius of the filter used in processing
+        resample_sr: resample rate
+        rms_mix_rate: rate to mix in RMS normalization
+        protect: protection factor to prevent clipping
+
+    Returns:
+        BytesIO object containing the processed audio
+    """
+    from configs.config import Config
+    from infer.modules.vc.modules import VC
+
+    # Create model cache if it doesn't exist already
+    if not hasattr(infer, 'model_cache'):
+        infer.model_cache = {}
+
+    model_name = model_name.replace(".pth", "")
+
+    if index_path is None:
+        index_path = os.path.join("logs", model_name, f"added_IVF1254_Flat_nprobe_1_{model_name}_v2.index")
+        if not os.path.exists(index_path):
+            raise ValueError(f"autinferred index_path {index_path} does not exist. Please provide a valid index_path")
+
+    # Load or get cached model
+    if model_name not in infer.model_cache:
+        config = Config()
+        config.device = device if device else config.device
+        config.is_half = is_half if is_half else config.is_half
+        vc = VC(config)
+        vc.get_vc(f"{model_name}.pth")
+        infer.model_cache[model_name] = vc
+
+    vc = infer.model_cache[model_name]
+
+    # If input is bytes, save to a temporary file first
+    temp_file = None
+    input_path = input
+
+    try:
+        # Check if input is a URL
+        if isinstance(input, str) and (input.startswith('http://') or input.startswith('https://')):
+            # Download the file from the URL
+            response = requests.get(input, stream=True)
+            response.raise_for_status()  # Raise an exception for bad responses
+
+            # Create a temporary file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+            # Write the content to the file
+            for chunk in response.iter_content(chunk_size=8192):
+                temp_file.write(chunk)
+            temp_file.close()
+            input_path = temp_file.name
+
+        # Check if input is bytes
+        elif isinstance(input, bytes):
+            # Create a temporary file to save the audio bytes
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+            temp_file.write(input)
+            temp_file.close()
+            input_path = temp_file.name
+
+        # Process the audio
+        _, wav_opt = vc.vc_single(
+            sid=0,
+            input_audio_path=input_path,
+            f0_up_key=f0up_key,
+            f0_file=None,
+            f0_method=f0method,
+            file_index=index_path,
+            file_index2=None,
+            index_rate=index_rate,
+            filter_radius=filter_radius,
+            resample_sr=resample_sr,
+            rms_mix_rate=rms_mix_rate,
+            protect=protect
+        )
+    finally:
+        # Clean up the temporary file if it was created
+        if temp_file is not None:
+            try:
+                os.unlink(temp_file.name)
+            except:
+                pass
+
+    # using virtual file to be able to return it as response
+    wf = BytesIO()
+    wavfile.write(wf, wav_opt[0], wav_opt[1])
+    wf.seek(0)
+    return wf

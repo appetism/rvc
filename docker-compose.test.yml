@@ -19,5 +19,6 @@ services:
       - ./logs:/app/logs
       - ./infer/lib:/app/infer/lib
       - ./rvc_api.py:/app/rvc_api.py
+      - ./runpod_handler.py:/app/runpod_handler.py
       - ./test_input.json:/app/test_input.json
       # - ./dataset:/app/dataset # you can use this folder in order to provide your dataset for model training

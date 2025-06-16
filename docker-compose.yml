@@ -21,6 +21,7 @@ services:
       - ./logs:/app/logs
       - ./infer/lib:/app/infer/lib
       - ./rvc_api.py:/app/rvc_api.py
+      - ./services:/app/services
       # - ./dataset:/app/dataset # you can use this folder in order to provide your dataset for model training
     ports:
       - 7865:7865
