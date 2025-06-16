@@ -14,6 +14,7 @@ RUN apt-get update && \
         ffmpeg \
         aria2 \
         libx11-dev \
+        libgomp1 \
         software-properties-common \
         build-essential \
         python-dev \
@@ -78,8 +79,7 @@ ENV OPENBLAS_NUM_THREADS=1 \
     weight_uvr5_root=assets/uvr5_weights \
     index_root=logs \
     outside_index_root=assets/indices \
-    rmvpe_root=assets/rmvpe \
-    LD_PRELOAD="/usr/local/lib/python3.9/dist-packages/faiss_cpu.libs/libgomp-d22c30c5.so.1.0.0"
+    rmvpe_root=assets/rmvpe
 
 VOLUME ["/app/assets/weights", "/app/opt"]
 
