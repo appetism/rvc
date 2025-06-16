@@ -86,8 +86,6 @@ RUN mkdir -p /runpod-volume/assets/weights && \
     rm -rf /app/assets/weights && \
     ln -s /runpod-volume/assets/weights /app/assets/weights && \
     rm -rf /app/opt && \
-    ln -s /runpod-volume/opt /app/opt \
-
-VOLUME ["/runpod-volume"]
+    ln -s /runpod-volume/opt /app/opt
 
 EXPOSE 7866
