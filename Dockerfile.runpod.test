@@ -33,9 +33,9 @@ RUN apt-get update && \
     && curl -s https://bootstrap.pypa.io/get-pip.py | python3.9
 
 # Copy requirements early and install Python dependencies
-COPY requirements-gpu.txt ./
+COPY requirements.txt ./
 RUN python3 -m pip install --upgrade --no-cache-dir pip==24.0 && \
-    python3 -m pip install --no-cache-dir -r requirements-gpu.txt
+    python3 -m pip install --no-cache-dir -r requirements.txt
 
 # Download all models in parallel - create directories first
 RUN mkdir -p assets/pretrained_v2 assets/uvr5_weights assets/hubert assets/rmvpe

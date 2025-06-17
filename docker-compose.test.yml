@@ -3,7 +3,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: Dockerfile.runpod
+      dockerfile: Dockerfile.runpod.test
     container_name: rvc-container-runpod
     command: ["python3", "/app/runpod_handler.py"]
     environment:
