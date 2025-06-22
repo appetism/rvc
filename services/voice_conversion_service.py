@@ -12,13 +12,9 @@ from fastapi import BackgroundTasks
 from concurrent.futures import ThreadPoolExecutor
 from scipy.io import wavfile # type: ignore
 from .model_manager_service import HuggingFaceModelManager
-from .model_cache_service import ModelCache
 
 # Create executor for async operations
 executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4))
-
-# create model cache
-model_cache = ModelCache()
 
 # Load S3 configuration from environment variables
 S3_ENABLED = os.environ.get("S3_ENABLED", "false").lower() == 'true'
