@@ -7,17 +7,17 @@ import requests
 import shutil
 from typing import Union
 from io import BytesIO
-from botocore.client import Config as BotoConfig # type: ignore
+from botocore.client import Config as BotoConfig  # type: ignore
 from fastapi import BackgroundTasks
 from concurrent.futures import ThreadPoolExecutor
-from scipy.io import wavfile # type: ignore
+from scipy.io import wavfile  # type: ignore
 from .model_manager_service import HuggingFaceModelManager
 
 # Create executor for async operations
 executor = ThreadPoolExecutor(max_workers=min(32, (os.cpu_count() or 1) + 4))
 
 # Load S3 configuration from environment variables
-S3_ENABLED = os.environ.get("S3_ENABLED", "false").lower() == 'true'
+S3_ENABLED = os.environ.get("S3_ENABLED", "false").lower() == "true"
 s3_client = None
 BUCKET_NAME = None
 
@@ -27,7 +27,7 @@ if S3_ENABLED:
     BUCKET_ACCESS_KEY_ID = os.environ.get("BUCKET_ACCESS_KEY_ID", None)
     BUCKET_SECRET_ACCESS_KEY = os.environ.get("BUCKET_SECRET_ACCESS_KEY", None)
     BUCKET_NAME = os.environ.get("BUCKET_NAME", None)
-    S3_KEY_PREFIX = os.environ.get("S3_KEY_PREFIX", "").strip('/')
+    S3_KEY_PREFIX = os.environ.get("S3_KEY_PREFIX", "").strip("/")
 
     missing_configs = []
     if not BUCKET_ENDPOINT_URL:
@@ -42,22 +42,24 @@ if S3_ENABLED:
         missing_configs.append("BUCKET_NAME")
 
     if missing_configs:
-        print(f"Error: The following S3 environment variables are not set, but S3_ENABLED is 'true': {', '.join(missing_configs)}. S3 functionality will be disabled.")
+        print(
+            f"Error: The following S3 environment variables are not set, but S3_ENABLED is 'true': {', '.join(missing_configs)}. S3 functionality will be disabled."
+        )
         s3_client = None
     else:
         try:
             # Initialize S3 client
             s3_client = boto3.client(
-                's3',
+                "s3",
                 endpoint_url=BUCKET_ENDPOINT_URL,
                 aws_access_key_id=BUCKET_ACCESS_KEY_ID,
                 aws_secret_access_key=BUCKET_SECRET_ACCESS_KEY,
                 config=BotoConfig(
-                    signature_version='s3v4',
-                    request_checksum_calculation='when_required',   # REQUIRED WITH GCS
-                    response_checksum_validation='when_required',  # REQUIRED WITH GCS
+                    signature_version="s3v4",
+                    request_checksum_calculation="when_required",  # REQUIRED WITH GCS
+                    response_checksum_validation="when_required",  # REQUIRED WITH GCS
                 ),
-                region_name=BUCKET_AREA
+                region_name=BUCKET_AREA,
             )
 
             print("S3 Configuration loaded successfully.")
@@ -65,18 +67,25 @@ if S3_ENABLED:
             print(f"  BUCKET_NAME: {BUCKET_NAME}")
             print(f"  BUCKET_AREA: {BUCKET_AREA}")
             print(f"  BUCKET_ENDPOINT_URL: {BUCKET_ENDPOINT_URL}")
-            print(f"  BUCKET_ACCESS_KEY_ID: {BUCKET_ACCESS_KEY_ID[:4]}...{BUCKET_ACCESS_KEY_ID[-4:] if BUCKET_ACCESS_KEY_ID and len(BUCKET_ACCESS_KEY_ID) > 8 else '****'}")
+            print(
+                f"  BUCKET_ACCESS_KEY_ID: {BUCKET_ACCESS_KEY_ID[:4]}...{BUCKET_ACCESS_KEY_ID[-4:] if BUCKET_ACCESS_KEY_ID and len(BUCKET_ACCESS_KEY_ID) > 8 else '****'}"
+            )
             print(f"  S3_KEY_PREFIX: {S3_KEY_PREFIX if S3_KEY_PREFIX else 'None'}")
 
         except Exception as e:
-            print(f"Error initializing S3 client: {e}. S3 functionality will be disabled.")
+            print(
+                f"Error initializing S3 client: {e}. S3 functionality will be disabled."
+            )
             s3_client = None
 else:
-    print("S3 upload functionality is not enabled (S3_ENABLED environment variable is not set to 'true').")
+    print(
+        "S3 upload functionality is not enabled (S3_ENABLED environment variable is not set to 'true')."
+    )
     S3_KEY_PREFIX = ""
 
+
 async def process_voice_to_s3(
-    background_tasks: BackgroundTasks, # type: ignore
+    background_tasks: BackgroundTasks,  # type: ignore
     input_url: str,
     model_name: str,
     index_path: str,
@@ -90,7 +99,7 @@ async def process_voice_to_s3(
     volume_envelope: float,
     voiceless_protection: float,
     infer_function,
-    now_dir
+    now_dir,
 ):
     """
     Process voice conversion and upload the result to S3.
@@ -121,10 +130,12 @@ async def process_voice_to_s3(
     # Check if S3 is configured and client is available
     if not S3_ENABLED or not s3_client:
         # Raise ValueError instead of HTTPException
-        raise ValueError("S3 upload functionality is not enabled or configured correctly. Check server logs and S3_ENABLED, BUCKET_ENDPOINT_URL, etc. environment variables.")
+        raise ValueError(
+            "S3 upload functionality is not enabled or configured correctly. Check server logs and S3_ENABLED, BUCKET_ENDPOINT_URL, etc. environment variables."
+        )
 
     # Validate URL
-    if not input_url.startswith('http://') and not input_url.startswith('https://'):
+    if not input_url.startswith("http://") and not input_url.startswith("https://"):
         # Raise ValueError instead of HTTPException
         raise ValueError("Invalid URL. Must start with http:// or https://")
 
@@ -148,7 +159,9 @@ async def process_voice_to_s3(
         index_path_local = os.path.join(now_dir, "logs", index_filename)
 
         # Check if model already exists locally
-        model_exists_locally = os.path.exists(pth_path) and os.path.exists(index_path_local)
+        model_exists_locally = os.path.exists(pth_path) and os.path.exists(
+            index_path_local
+        )
 
         if model_exists_locally:
             print(f"Model {repo_id} already exists locally. Skipping download.")
@@ -174,14 +187,18 @@ async def process_voice_to_s3(
 
                 # Copy model files if needed
                 if os.path.exists(model_info["pth_path"]) and (
-                   not os.path.exists(pth_path) or
-                   os.path.getmtime(model_info["pth_path"]) > os.path.getmtime(pth_path)):
+                    not os.path.exists(pth_path)
+                    or os.path.getmtime(model_info["pth_path"])
+                    > os.path.getmtime(pth_path)
+                ):
                     print(f"Copying model weights to {pth_path}")
                     shutil.copy2(model_info["pth_path"], pth_path)
 
                 if os.path.exists(model_info["index_path"]) and (
-                   not os.path.exists(index_path_local) or
-                   os.path.getmtime(model_info["index_path"]) > os.path.getmtime(index_path_local)):
+                    not os.path.exists(index_path_local)
+                    or os.path.getmtime(model_info["index_path"])
+                    > os.path.getmtime(index_path_local)
+                ):
                     print(f"Copying model index to {index_path_local}")
                     shutil.copy2(model_info["index_path"], index_path_local)
 
@@ -198,7 +215,7 @@ async def process_voice_to_s3(
             print(f"Using index path: {index_path}")
 
     # Generate a unique filename for S3
-    file_extension = 'wav'
+    file_extension = "wav"
     file_uuid = str(uuid.uuid4())
     file_name = f"{file_uuid}.{file_extension}"
     s3_key = f"{S3_KEY_PREFIX}/{file_name}" if S3_KEY_PREFIX else file_name
@@ -206,9 +223,20 @@ async def process_voice_to_s3(
     # Call the infer function with the renamed parameters
     try:
         wf = await asyncio.get_event_loop().run_in_executor(
-            executor, infer_function, input_url, model_name, index_path, transpose, pitch_extraction_algorithm,
-            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
-            voiceless_protection
+            executor,
+            infer_function,
+            input_url,
+            model_name,
+            index_path,
+            transpose,
+            pitch_extraction_algorithm,
+            search_feature_ratio,
+            device,
+            is_half,
+            filter_radius,
+            resample_output,
+            volume_envelope,
+            voiceless_protection,
         )
     except Exception as e:
         # Re-raise the exception to be caught by rvc_api.py
@@ -220,19 +248,16 @@ async def process_voice_to_s3(
 
         # Generate a presigned URL for the uploaded file
         presigned_url = s3_client.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': BUCKET_NAME,
-                'Key': s3_key
-            },
-            ExpiresIn=3600  # URL expires in 1 hour
+            "get_object",
+            Params={"Bucket": BUCKET_NAME, "Key": s3_key},
+            ExpiresIn=3600,  # URL expires in 1 hour
         )
 
         # Return the S3 URL in JSON response
         return {
             "status": "success",
             "message": "Audio processed and uploaded successfully",
-            "audio_url": presigned_url
+            "audio_url": presigned_url,
         }
     except Exception as e:
         # Raise RuntimeError instead of HTTPException
@@ -241,20 +266,21 @@ async def process_voice_to_s3(
         # Clean up the BytesIO object
         background_tasks.add_task(wf.close)
 
+
 def infer(
-        input: Union[str, bytes], # filepath, URL or raw bytes
-        model_name: str,
-        index_path: str = None,
-        f0up_key: int = 0,
-        f0method: str = "crepe",
-        index_rate: float = 0.66,
-        device: str = None,
-        is_half: bool = False,
-        filter_radius: int = 3,
-        resample_sr: int = 0,
-        rms_mix_rate: float = 1,
-        protect: float = 0.33,
-        **kwargs
+    input: Union[str, bytes],  # filepath, URL or raw bytes
+    model_name: str,
+    index_path: str = None,
+    f0up_key: int = 0,
+    f0method: str = "crepe",
+    index_rate: float = 0.66,
+    device: str = None,
+    is_half: bool = False,
+    filter_radius: int = 3,
+    resample_sr: int = 0,
+    rms_mix_rate: float = 1,
+    protect: float = 0.33,
+    **kwargs,
 ):
     """
     Perform voice conversion inference.
@@ -280,15 +306,19 @@ def infer(
     from infer.modules.vc.modules import VC
 
     # Create model cache if it doesn't exist already
-    if not hasattr(infer, 'model_cache'):
+    if not hasattr(infer, "model_cache"):
         infer.model_cache = {}
 
     model_name = model_name.replace(".pth", "")
 
     if index_path is None:
-        index_path = os.path.join("logs", model_name, f"added_IVF1254_Flat_nprobe_1_{model_name}_v2.index")
+        index_path = os.path.join(
+            "logs", model_name, f"added_IVF1254_Flat_nprobe_1_{model_name}_v2.index"
+        )
         if not os.path.exists(index_path):
-            raise ValueError(f"autinferred index_path {index_path} does not exist. Please provide a valid index_path")
+            raise ValueError(
+                f"autinferred index_path {index_path} does not exist. Please provide a valid index_path"
+            )
 
     # Load or get cached model
     if model_name not in infer.model_cache:
@@ -307,13 +337,15 @@ def infer(
 
     try:
         # Check if input is a URL
-        if isinstance(input, str) and (input.startswith('http://') or input.startswith('https://')):
+        if isinstance(input, str) and (
+            input.startswith("http://") or input.startswith("https://")
+        ):
             # Download the file from the URL
             response = requests.get(input, stream=True)
             response.raise_for_status()  # Raise an exception for bad responses
 
             # Create a temporary file
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
             # Write the content to the file
             for chunk in response.iter_content(chunk_size=8192):
                 temp_file.write(chunk)
@@ -323,7 +355,7 @@ def infer(
         # Check if input is bytes
         elif isinstance(input, bytes):
             # Create a temporary file to save the audio bytes
-            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.wav')
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
             temp_file.write(input)
             temp_file.close()
             input_path = temp_file.name
@@ -341,7 +373,7 @@ def infer(
             filter_radius=filter_radius,
             resample_sr=resample_sr,
             rms_mix_rate=rms_mix_rate,
-            protect=protect
+            protect=protect,
         )
     finally:
         # Clean up the temporary file if it was created
@@ -357,8 +389,9 @@ def infer(
     wf.seek(0)
     return wf
 
+
 async def process_voice_to_voice(
-    background_tasks: BackgroundTasks, # type: ignore
+    background_tasks: BackgroundTasks,  # type: ignore
     audio_bytes: bytes,
     model_name: str,
     index_path: str,
@@ -370,7 +403,7 @@ async def process_voice_to_voice(
     filter_radius: int,
     resample_output: int,
     volume_envelope: float,
-    voiceless_protection: float
+    voiceless_protection: float,
 ):
     """
     Process voice conversion from uploaded audio bytes.
@@ -396,9 +429,20 @@ async def process_voice_to_voice(
     try:
         # Call the infer function
         wf = await asyncio.get_event_loop().run_in_executor(
-            executor, infer, audio_bytes, model_name, index_path, transpose, pitch_extraction_algorithm,
-            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
-            voiceless_protection
+            executor,
+            infer,
+            audio_bytes,
+            model_name,
+            index_path,
+            transpose,
+            pitch_extraction_algorithm,
+            search_feature_ratio,
+            device,
+            is_half,
+            filter_radius,
+            resample_output,
+            volume_envelope,
+            voiceless_protection,
         )
 
         # Schedule the close operation for after the response is sent
@@ -409,8 +453,9 @@ async def process_voice_to_voice(
         # Re-raise the exception to be caught by rvc_api.py
         raise RuntimeError(str(e))
 
+
 async def process_voice_url_to_voice(
-    background_tasks: BackgroundTasks, # type: ignore
+    background_tasks: BackgroundTasks,  # type: ignore
     input_url: str,
     model_name: str,
     index_path: str,
@@ -422,7 +467,7 @@ async def process_voice_url_to_voice(
     filter_radius: int,
     resample_output: int,
     volume_envelope: float,
-    voiceless_protection: float
+    voiceless_protection: float,
 ):
     """
     Process voice conversion from a URL to an audio file.
@@ -446,16 +491,27 @@ async def process_voice_url_to_voice(
         BytesIO object containing the processed audio
     """
     # Validate URL
-    if not input_url.startswith('http://') and not input_url.startswith('https://'):
+    if not input_url.startswith("http://") and not input_url.startswith("https://"):
         # Raise ValueError instead of HTTPException
         raise ValueError("Invalid URL. Must start with http:// or https://")
 
     try:
         # Call the infer function
         wf = await asyncio.get_event_loop().run_in_executor(
-            executor, infer, input_url, model_name, index_path, transpose, pitch_extraction_algorithm,
-            search_feature_ratio, device, is_half, filter_radius, resample_output, volume_envelope,
-            voiceless_protection
+            executor,
+            infer,
+            input_url,
+            model_name,
+            index_path,
+            transpose,
+            pitch_extraction_algorithm,
+            search_feature_ratio,
+            device,
+            is_half,
+            filter_radius,
+            resample_output,
+            volume_envelope,
+            voiceless_protection,
         )
 
         # Schedule the close operation for after the response is sent

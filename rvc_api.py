@@ -32,7 +32,7 @@ async def voice2voice(
     filter_radius: int = Form(3),
     resample_output: int = Form(0),  # Renamed from resample_sr
     volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
-    voiceless_protection: float = Form(0.33)  # Renamed from protect
+    voiceless_protection: float = Form(0.33),  # Renamed from protect
 ):
     """
     Endpoint to convert voices from one type to another using a specified model.
@@ -73,17 +73,23 @@ async def voice2voice(
             filter_radius=filter_radius,
             resample_output=resample_output,
             volume_envelope=volume_envelope,
-            voiceless_protection=voiceless_protection
+            voiceless_protection=voiceless_protection,
         )
 
         # Return the response
-        return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
+        return StreamingResponse(
+            wf,
+            media_type="audio/wav",
+            headers={"Content-Disposition": "attachment; filename=rvc.wav"},
+        )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except RuntimeError as re:
         raise HTTPException(status_code=500, detail=str(re))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 @app.post("/voice2voice_url", tags=["voice2voice"])
@@ -100,7 +106,7 @@ async def voice2voice_url(
     filter_radius: int = Form(3),
     resample_output: int = Form(0),  # Renamed from resample_sr
     volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
-    voiceless_protection: float = Form(0.33)  # Renamed from protect
+    voiceless_protection: float = Form(0.33),  # Renamed from protect
 ):
     """
     Endpoint to convert voices from a URL audio file using a specified model.
@@ -136,17 +142,23 @@ async def voice2voice_url(
             filter_radius=filter_radius,
             resample_output=resample_output,
             volume_envelope=volume_envelope,
-            voiceless_protection=voiceless_protection
+            voiceless_protection=voiceless_protection,
         )
 
         # Return the response
-        return StreamingResponse(wf, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=rvc.wav"})
+        return StreamingResponse(
+            wf,
+            media_type="audio/wav",
+            headers={"Content-Disposition": "attachment; filename=rvc.wav"},
+        )
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except RuntimeError as re:
         raise HTTPException(status_code=500, detail=str(re))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 @app.post("/voice2voice_url_s3", tags=["voice2voice"])
@@ -154,7 +166,9 @@ async def voice2voice_url_s3(
     background_tasks: BackgroundTasks,
     input_url: str = Form(...),
     model_name: str = Form(...),  # This will be updated if it's an HF ID
-    index_path: str = Form(None),  # This will be updated if HF model and index_path was None
+    index_path: str = Form(
+        None
+    ),  # This will be updated if HF model and index_path was None
     transpose: int = Form(0),  # Renamed from f0up_key
     pitch_extraction_algorithm: str = Form("rmvpe"),  # Renamed from f0method
     search_feature_ratio: float = Form(0.66),  # Renamed from index_rate
@@ -163,7 +177,7 @@ async def voice2voice_url_s3(
     filter_radius: int = Form(3),
     resample_output: int = Form(0),  # Renamed from resample_sr
     volume_envelope: float = Form(1),  # Renamed from rms_mix_rate
-    voiceless_protection: float = Form(0.33)  # Renamed from protect
+    voiceless_protection: float = Form(0.33),  # Renamed from protect
 ):
     """
     Endpoint to convert voices from a URL audio file using a specified model,
@@ -202,7 +216,7 @@ async def voice2voice_url_s3(
             volume_envelope=volume_envelope,
             voiceless_protection=voiceless_protection,
             infer_function=infer,
-            now_dir=now_dir
+            now_dir=now_dir,
         )
         return response
     except ValueError as ve:
@@ -210,7 +224,9 @@ async def voice2voice_url_s3(
     except RuntimeError as re:
         raise HTTPException(status_code=500, detail=str(re))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"An unexpected error occurred: {str(e)}"
+        )
 
 
 @app.get("/status")
@@ -230,12 +246,7 @@ async def list_models():
         weights_dir = os.path.join(now_dir, "assets", "weights")
 
         if not os.path.exists(weights_dir):
-            return JSONResponse(
-                content={
-                    "status": "success",
-                    "models": []
-                }
-            )
+            return JSONResponse(content={"status": "success", "models": []})
 
         models = [
             os.path.splitext(file)[0]
@@ -243,20 +254,13 @@ async def list_models():
             if file.endswith(".pth")
         ]
 
-        return JSONResponse(
-            content={
-                "status": "success",
-                "models": models
-            }
-        )
+        return JSONResponse(content={"status": "success", "models": models})
     except Exception as e:
         return JSONResponse(
-            content={
-                "status": "error",
-                "message": f"Error listing models: {str(e)}"
-            },
-            status_code=500
+            content={"status": "error", "message": f"Error listing models: {str(e)}"},
+            status_code=500,
         )
+
 
 # start uvicorn server
 uvicorn.run(app, host="0.0.0.0", port=7866)
