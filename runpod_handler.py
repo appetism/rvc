@@ -185,9 +185,9 @@ def check_disk_space():
     try:
         import shutil
         _, _, free = shutil.disk_usage("/")
-        free_gb = free // (1024**3)
-        print(f"Available disk space: {free_gb} GB")
-        return free_gb > 1  # Return True if more than 1GB free
+        free_mb = free // (1024**2)  # Convert to MB
+        print(f"Available disk space: {free_mb} MB")
+        return free_mb > 400  # Return True if more than 400MB free
     except Exception as e:
         print(f"Error checking disk space: {e}")
         return False
