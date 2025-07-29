@@ -15,6 +15,7 @@ RUNPOD_WEIGHTS_DIR = "/runpod-volume/assets/weights"
 RUNPOD_LOGS_DIR = "/runpod-volume/logs"
 RUNPOD_OPT_DIR = "/runpod-volume/opt"
 
+
 def ensure_directory(path):
     """Create directory if it doesn't exist, preserving symlinks."""
     if os.path.islink(path):
@@ -34,16 +35,12 @@ def ensure_directory(path):
 
 
 def error_response(message, status_code=400):
-    return {
-        "statusCode": status_code,
-        "body": message
-    }
+    return {"statusCode": status_code, "body": message}
+
 
 def success_response(msg):
-    return {
-        "statusCode": 200,
-        "body": msg
-    }
+    return {"statusCode": 200, "body": msg}
+
 
 # --- Argument Validation ---
 def validate_job_input(job_input):
@@ -57,7 +54,10 @@ def validate_job_input(job_input):
             return f"Missing required parameter: {param}"
 
     # Type and value checks
-    if not isinstance(job_input["audio_url"], str) or not (job_input["audio_url"].startswith('http://') or job_input["audio_url"].startswith('https://')):
+    if not isinstance(job_input["audio_url"], str) or not (
+        job_input["audio_url"].startswith("http://")
+        or job_input["audio_url"].startswith("https://")
+    ):
         return "Invalid 'audio_url': Must be a valid HTTP/HTTPS URL string."
     if not isinstance(job_input["model_name"], str):
         return "Invalid 'model_name': Must be a string."
@@ -66,16 +66,18 @@ def validate_job_input(job_input):
     params = {
         "audio_url": job_input["audio_url"],
         "model_name": job_input["model_name"],
-        "index_path": job_input.get("index_path"), # Optional
+        "index_path": job_input.get("index_path"),  # Optional
         "transpose": job_input.get("transpose", 0),
-        "pitch_extraction_algorithm": job_input.get("pitch_extraction_algorithm", "rmvpe"),
+        "pitch_extraction_algorithm": job_input.get(
+            "pitch_extraction_algorithm", "rmvpe"
+        ),
         "search_feature_ratio": job_input.get("search_feature_ratio", 0.66),
-        "device": job_input.get("device"), # Optional
+        "device": job_input.get("device"),  # Optional
         "is_half": job_input.get("is_half", False),
         "filter_radius": job_input.get("filter_radius", 3),
         "resample_output": job_input.get("resample_output", 0),
         "volume_envelope": job_input.get("volume_envelope", 1),
-        "voiceless_protection": job_input.get("voiceless_protection", 0.33)
+        "voiceless_protection": job_input.get("voiceless_protection", 0.33),
     }
 
     # Example of more specific validation if needed:
@@ -86,6 +88,7 @@ def validate_job_input(job_input):
     # Filter out None values for optional fields if the API expects them to be absent not null
     return {k: v for k, v in params.items() if v is not None}
 
+
 # --- RunPod Handler ---
 async def handler(job):  # MODIFIED: Made handler async
     """
@@ -93,22 +96,27 @@ async def handler(job):  # MODIFIED: Made handler async
     Receives a job, validates input, calls process_voice_to_s3 directly,
     and returns the S3 URL of the processed audio.
     """
-    job_input = job.get('input')
+    job_input = job.get("input")
     if not job_input:
         return error_response("No input provided.")
 
     print(f"Received job input: {json.dumps(job_input, indent=2)}")
 
     validated_params = validate_job_input(job_input)
-    if isinstance(validated_params, str): # Validation failed
+    if isinstance(validated_params, str):  # Validation failed
         return error_response(validated_params)
 
-    print(f"Processing voice conversion with parameters: {json.dumps(validated_params, indent=2)}")
+    print(
+        f"Processing voice conversion with parameters: {json.dumps(validated_params, indent=2)}"
+    )
 
     try:
         # Check and manage disk space before processing
         if not check_and_manage_disk_space():
-            return error_response("Critical disk space issue. Unable to free sufficient space.", status_code=507)
+            return error_response(
+                "Critical disk space issue. Unable to free sufficient space.",
+                status_code=507,
+            )
 
         # Clear CUDA memory before processing
         clear_cuda_memory()
@@ -135,7 +143,7 @@ async def handler(job):  # MODIFIED: Made handler async
             volume_envelope=validated_params["volume_envelope"],
             voiceless_protection=validated_params["voiceless_protection"],
             infer_function=infer,
-            now_dir=now_dir
+            now_dir=now_dir,
         )
 
         # The response from process_voice_to_s3 is assumed to be a dictionary directly
@@ -147,18 +155,29 @@ async def handler(job):  # MODIFIED: Made handler async
         if response.get("status") == "success" and "audio_url" in response:
             # Clear memory after successful processing
             clear_cuda_memory()
-            return success_response({"audio_url": response["audio_url"], "message": response.get("message")})
+            return success_response(
+                {"audio_url": response["audio_url"], "message": response.get("message")}
+            )
         else:
-            error_msg = response.get("detail") or response.get("message") or "Unknown error from voice conversion"
+            error_msg = (
+                response.get("detail")
+                or response.get("message")
+                or "Unknown error from voice conversion"
+            )
 
             # Check if the error is fatal
             if is_fatal_error(error_msg):
                 # Return error response first, then terminate worker
-                error_resp = error_response(f"Voice conversion failed: {error_msg}. Worker terminating.", status_code=500)
+                error_resp = error_response(
+                    f"Voice conversion failed: {error_msg}. Worker terminating.",
+                    status_code=500,
+                )
                 terminate_worker(error_msg)
                 return error_resp
 
-            return error_response(f"Voice conversion failed: {error_msg}", status_code=500)
+            return error_response(
+                f"Voice conversion failed: {error_msg}", status_code=500
+            )
 
     except Exception as e:
         error_str = str(e)
@@ -167,13 +186,17 @@ async def handler(job):  # MODIFIED: Made handler async
         # Check if this is a fatal error that requires worker termination
         if is_fatal_error(error_str):
             # Return error response first, then terminate worker
-            error_resp = error_response(f"Fatal error occurred: {error_str}. Worker terminating.", status_code=500)
+            error_resp = error_response(
+                f"Fatal error occurred: {error_str}. Worker terminating.",
+                status_code=500,
+            )
             terminate_worker(error_str)
             return error_resp
 
         # For non-fatal errors, clear memory and return normal error
         clear_cuda_memory()
         return error_response(f"An error occurred: {error_str}")
+
 
 def clear_cuda_memory():
     """Clear CUDA memory to free up GPU resources."""
@@ -186,10 +209,12 @@ def clear_cuda_memory():
     except Exception as e:
         print(f"Error clearing CUDA memory: {e}")
 
+
 def check_disk_space():
     """Check available disk space."""
     try:
         import shutil
+
         _, _, free = shutil.disk_usage("/")
         free_mb = free // (1024**2)  # Convert to MB
         print(f"Available disk space: {free_mb} MB")
@@ -197,6 +222,7 @@ def check_disk_space():
     except Exception as e:
         print(f"Error checking disk space: {e}")
         return False
+
 
 def clear_runpod_folders():
     """Clear RunPod volume folders to free up disk space."""
@@ -219,6 +245,7 @@ def clear_runpod_folders():
                 print(f"Folder does not exist: {folder}")
         except Exception as e:
             print(f"Error clearing folder {folder}: {e}")
+
 
 def check_and_manage_disk_space():
     """Check disk space and clear folders if insufficient."""
@@ -243,6 +270,7 @@ def check_and_manage_disk_space():
         print(f"Error checking/managing disk space: {e}")
         return False
 
+
 def is_fatal_error(error_str):
     """Check if the error is fatal and requires worker termination."""
     error_str = str(error_str).lower()
@@ -261,6 +289,7 @@ def is_fatal_error(error_str):
 
     return False
 
+
 def terminate_worker(reason):
     """Terminate the current worker gracefully."""
     print(f"FATAL ERROR DETECTED: {reason}")
@@ -274,6 +303,7 @@ def terminate_worker(reason):
 
     # If SIGTERM doesn't work, force exit
     sys.exit(1)
+
 
 # --- Main Execution ---
 if __name__ == "__main__":
