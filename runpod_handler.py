@@ -5,9 +5,15 @@ import gc
 import torch
 import sys
 import signal
+import shutil
 
 from services.voice_conversion_service import process_voice_to_s3, infer
 from fastapi import BackgroundTasks
+
+# Global variables for RunPod volume directories
+RUNPOD_WEIGHTS_DIR = "/runpod-volume/assets/weights"
+RUNPOD_LOGS_DIR = "/runpod-volume/logs"
+RUNPOD_OPT_DIR = "/runpod-volume/opt"
 
 def ensure_directory(path):
     """Create directory if it doesn't exist, preserving symlinks."""
@@ -100,9 +106,9 @@ async def handler(job):  # MODIFIED: Made handler async
     print(f"Processing voice conversion with parameters: {json.dumps(validated_params, indent=2)}")
 
     try:
-        # Check disk space before processing
-        if not check_disk_space():
-            return error_response("Insufficient disk space. Worker will be terminated.", status_code=507)
+        # Check and manage disk space before processing
+        if not check_and_manage_disk_space():
+            return error_response("Critical disk space issue. Unable to free sufficient space.", status_code=507)
 
         # Clear CUDA memory before processing
         clear_cuda_memory()
@@ -192,6 +198,51 @@ def check_disk_space():
         print(f"Error checking disk space: {e}")
         return False
 
+def clear_runpod_folders():
+    """Clear RunPod volume folders to free up disk space."""
+    folders_to_clear = [RUNPOD_WEIGHTS_DIR, RUNPOD_LOGS_DIR, RUNPOD_OPT_DIR]
+
+    for folder in folders_to_clear:
+        try:
+            if os.path.exists(folder):
+                # Remove all contents but keep the directory
+                for item in os.listdir(folder):
+                    item_path = os.path.join(folder, item)
+                    if os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                        print(f"Removed directory: {item_path}")
+                    else:
+                        os.remove(item_path)
+                        print(f"Removed file: {item_path}")
+                print(f"Cleared folder: {folder}")
+            else:
+                print(f"Folder does not exist: {folder}")
+        except Exception as e:
+            print(f"Error clearing folder {folder}: {e}")
+
+def check_and_manage_disk_space():
+    """Check disk space and clear folders if insufficient."""
+    try:
+        _, _, free = shutil.disk_usage("/")
+        free_mb = free // (1024**2)  # Convert to MB
+        print(f"Available disk space: {free_mb} MB")
+
+        if free_mb <= 400:  # If 400MB or less
+            print("Insufficient disk space detected. Clearing RunPod volume folders...")
+            clear_runpod_folders()
+
+            # Check space again after clearing
+            _, _, free_after = shutil.disk_usage("/")
+            free_mb_after = free_after // (1024**2)
+            print(f"Available disk space after cleanup: {free_mb_after} MB")
+
+            return free_mb_after > 400
+
+        return True  # Sufficient space
+    except Exception as e:
+        print(f"Error checking/managing disk space: {e}")
+        return False
+
 def is_fatal_error(error_str):
     """Check if the error is fatal and requires worker termination."""
     error_str = str(error_str).lower()
@@ -226,9 +277,9 @@ def terminate_worker(reason):
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    ensure_directory("/runpod-volume/assets/weights")
-    ensure_directory("/runpod-volume/logs")
-    ensure_directory("/runpod-volume/opt")
+    ensure_directory(RUNPOD_WEIGHTS_DIR)
+    ensure_directory(RUNPOD_LOGS_DIR)
+    ensure_directory(RUNPOD_OPT_DIR)
     print("Directory check completed")
     print("Starting RunPod handler for RVC voice conversion...")
     runpod.serverless.start({"handler": handler})
